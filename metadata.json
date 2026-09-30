@@ -1,0 +1,6 @@
+{
+  "name": "트립메이트",
+  "description": "여행 동행자 취향 분석 밸런스 게임 및 일정 조율, 공동 가계부 1/N 정산 앱",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
