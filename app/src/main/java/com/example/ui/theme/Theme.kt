@@ -1,31 +1,23 @@
 package com.example.ui.theme
 
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
 private val TripMateColorScheme = lightColorScheme(
-    primary = TravelBluePrimary,
+    primary = TripMateBlue,
     onPrimary = Color.White,
-    primaryContainer = TravelBlueLight,
-    onPrimaryContainer = TravelBlueDark,
-    secondary = TravelTeal,
+    secondary = TripMateOrange,
     onSecondary = Color.White,
-    tertiary = TravelOrange,
-    background = BackgroundLight,
-    onBackground = TextPrimary,
-    surface = SurfaceLight,
-    onSurface = TextPrimary,
-    surfaceVariant = SurfaceVariantLight,
-    onSurfaceVariant = TextSecondary,
-    outline = CardBorder
+    background = Color.White,
+    onBackground = TripMateTextPrimary,
+    surface = Color.White,
+    onSurface = TripMateTextPrimary
 )
 
 @Composable
 fun MyApplicationTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit
 ) {
     MaterialTheme(
