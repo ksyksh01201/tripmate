@@ -1,0 +1,6 @@
+{
+  "name": "TripMate",
+  "description": "TripMate 여행 계획 시작 화면, 로그인 화면 및 회원가입 화면",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
