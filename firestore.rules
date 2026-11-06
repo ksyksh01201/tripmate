@@ -36,6 +36,16 @@ service cloud.firestore {
         allow read, update, delete: if isTripMember();
         allow create: if isTripMember() && request.resource.data.createdBy == request.auth.uid;
       }
+
+      // 여행 일정: 여행 멤버만 보고 쓸 수 있습니다.
+      match /schedules/{scheduleId} {
+        function isScheduleMember() {
+          return request.auth != null
+            && request.auth.uid in get(/databases/$(database)/documents/trips/$(tripId)).data.members;
+        }
+        allow read, update, delete: if isScheduleMember();
+        allow create: if isScheduleMember() && request.resource.data.createdBy == request.auth.uid;
+      }
     }
   }
 }

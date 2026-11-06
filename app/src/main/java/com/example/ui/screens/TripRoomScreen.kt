@@ -142,6 +142,8 @@ fun TripRoomScreen(
                 is TripRoomUiState.Error -> CenterMessage(state.message)
                 is TripRoomUiState.Loaded -> if (currentTab == RoomTab.Budget) {
                     BudgetContent(trip = state.trip, myUid = state.myUid)
+                } else if (currentTab == RoomTab.Schedule) {
+                    ScheduleContent(trip = state.trip)
                 } else {
                     // 인원수가 바뀌면 부드럽게 화면 전환
                     AnimatedContent(
@@ -175,13 +177,7 @@ fun TripRoomScreen(
 
         TripRoomBottomBar(
             selected = currentTab,
-            onSelect = { tab ->
-                if (tab == RoomTab.Schedule) {
-                    Toast.makeText(context, "일정 기능은 준비 중이에요", Toast.LENGTH_SHORT).show()
-                } else {
-                    currentTab = tab
-                }
-            }
+            onSelect = { tab -> currentTab = tab }
         )
     }
 }
