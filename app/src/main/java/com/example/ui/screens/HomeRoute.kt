@@ -50,6 +50,9 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.data.Trip
+import com.example.ui.components.BusanThumbnail
+import com.example.ui.components.GenericTravelThumbnail
+import com.example.ui.components.JejuThumbnail
 import com.example.ui.components.TripMateLogo
 import com.example.ui.viewmodel.HomeViewModel
 import com.google.firebase.auth.FirebaseAuth
@@ -379,17 +382,14 @@ private fun MemberCircles(members: List<String>, myUid: String?) {
     }
 }
 
-/** 여행지 사진 자리 (사진이 준비되기 전까지는 여행지 이모지) */
+/** 여행지 동그라미 그림: 프로젝트에 이미 있는 TripVisuals.kt의 썸네일을 그대로 사용 */
 @Composable
 private fun DestinationCircle(destination: String, size: androidx.compose.ui.unit.Dp) {
-    Box(
-        modifier = Modifier
-            .size(size)
-            .clip(CircleShape)
-            .background(Color(0xFFDDE8FB)),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(text = destinationEmoji(destination), fontSize = (size.value * 0.42f).sp)
+    val modifier = Modifier.size(size)
+    when (destination) {
+        "부산" -> BusanThumbnail(modifier = modifier)
+        "제주" -> JejuThumbnail(modifier = modifier)
+        else -> GenericTravelThumbnail(modifier = modifier)
     }
 }
 
@@ -428,18 +428,6 @@ private fun dDayText(dDay: Long): String = when {
     dDay > 0 -> "D-$dDay"
     dDay == 0L -> "D-Day"
     else -> "여행 중"
-}
-
-private fun destinationEmoji(destination: String): String = when (destination) {
-    "부산" -> "🌉"
-    "제주" -> "🍊"
-    "서울" -> "🏙️"
-    "강릉", "속초", "포항" -> "🌊"
-    "여수", "통영" -> "⛵"
-    "경주" -> "🏯"
-    "전주" -> "🍲"
-    "춘천" -> "🚣"
-    else -> "✈️"
 }
 
 /** "2026-08-01" → 날짜 번호(일 단위). 날짜 비교/디데이 계산용 */
