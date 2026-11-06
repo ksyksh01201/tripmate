@@ -49,7 +49,9 @@ import com.example.ui.theme.TripMateTextSecondary
  */
 @Composable
 fun HomeScreen(
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onCreateTripClick: () -> Unit = {},
+    onJoinTripClick: () -> Unit = {}
 ) {
     Box(
         modifier = modifier
@@ -104,9 +106,7 @@ fun HomeScreen(
 
                 // 5. 첫 번째 버튼: "새 여행 만들기", 배경 #4A90E2, 흰색 글씨, 굵기 700, 높이 60px, 모서리 10px (비활성 유지)
                 Button(
-                    onClick = {
-                        // 현재 UI 단계: 클릭 동작 없음
-                    },
+                    onClick = onCreateTripClick,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(60.dp)
@@ -136,10 +136,9 @@ fun HomeScreen(
                         .clip(RoundedCornerShape(10.dp))
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
-                            indication = null
-                        ) {
-                            // 현재 UI 단계: 클릭 동작 없음
-                        }
+                            indication = null,
+                            onClick = onJoinTripClick
+                        )
                         .testTag("empty_join_trip_button"),
                     contentAlignment = Alignment.Center
                 ) {
