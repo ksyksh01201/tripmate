@@ -8,7 +8,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.retryWhen
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -31,9 +33,13 @@ class BudgetViewModel(private val tripId: String) : ViewModel() {
     /** null = 불러오는 중 */
     val expenses: StateFlow<List<Expense>?> =
         (repository?.getExpenses(tripId) ?: flowOf(emptyList()))
-            .catch { e ->
-                _loadError.value = "지출 내역을 불러오지 못했어요. (${e.message})"
-                emit(emptyList())
+            // 불러오기에 성공하면 오류 문구를 지움
+            .onEach { _loadError.value = null }
+            // 실패하면 (예: 보안 규칙이 아직 반영 전) 3초마다 자동으로 다시 시도
+            .retryWhen { e, _ ->
+                _loadError.value = "지출 내역을 불러오지 못했어요. 잠시 후 자동으로 다시 시도해요. (${e.message})"
+                delay(3_000)
+                true
             }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
