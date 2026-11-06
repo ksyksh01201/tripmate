@@ -8,6 +8,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -19,6 +20,7 @@ import com.example.ui.screens.HomeScreen
 import com.example.ui.screens.LoginScreen
 import com.example.ui.screens.SignUpScreen
 import com.example.ui.screens.SplashScreen
+import com.example.ui.screens.TripRoomScreen
 import com.example.ui.theme.MyApplicationTheme
 
 class MainActivity : ComponentActivity() {
@@ -41,6 +43,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun TripMateApp() {
     var currentScreen by rememberSaveable { mutableStateOf(Screen.Splash) }
+    var currentTripId by rememberSaveable { mutableStateOf<String?>(null) }
 
     when (currentScreen) {
         Screen.Splash -> {
@@ -72,7 +75,28 @@ fun TripMateApp() {
             BackHandler {
                 currentScreen = Screen.Login
             }
-            HomeScreen()
+            HomeScreen(
+                onOpenTrip = { tripId ->
+                    currentTripId = tripId
+                    currentScreen = Screen.TripRoom
+                }
+            )
+        }
+        Screen.TripRoom -> {
+            val tripId = currentTripId
+            val backToHome = {
+                currentTripId = null
+                currentScreen = Screen.Home
+            }
+            BackHandler(onBack = backToHome)
+            if (tripId == null) {
+                LaunchedEffect(Unit) { backToHome() }
+            } else {
+                TripRoomScreen(
+                    tripId = tripId,
+                    onBack = backToHome
+                )
+            }
         }
     }
 }
