@@ -38,7 +38,11 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDateRangePickerState
+import android.content.res.Configuration
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -320,6 +324,20 @@ private fun TripDateRangePickerDialog(
     )
     val start = state.selectedStartDateMillis
 
+    // 기기 언어와 상관없이 달력을 한국어로 표시 (요일, 월 이름, "시작일 - 종료일" 등)
+    val baseContext = LocalContext.current
+    val baseConfig = LocalConfiguration.current
+    val koreanConfig = remember(baseConfig) {
+        Configuration(baseConfig).apply { setLocale(Locale.KOREA) }
+    }
+    val koreanContext = remember(baseContext, koreanConfig) {
+        baseContext.createConfigurationContext(koreanConfig)
+    }
+
+    CompositionLocalProvider(
+        LocalConfiguration provides koreanConfig,
+        LocalContext provides koreanContext
+    ) {
     DatePickerDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
@@ -345,6 +363,7 @@ private fun TripDateRangePickerDialog(
             },
             showModeToggle = false
         )
+    }
     }
 }
 
