@@ -191,14 +191,12 @@ fun BudgetContent(trip: Trip, myUid: String?) {
                     showAdd = true
                 }
             )
-            else -> Text(
-                text = "${tab.label} 화면은 다음 단계에서 만들 예정이에요",
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(40.dp),
-                textAlign = TextAlign.Center,
-                fontSize = 14.sp,
-                color = BudgetGray
+            BudgetTab.Analysis -> SpendingAnalysisSection(expenses = list)
+            BudgetTab.Settle -> SettlementSection(
+                members = members,
+                myUid = myUid,
+                expenses = list,
+                summary = summary
             )
         }
     }

@@ -55,4 +55,39 @@ object BudgetCalculator {
         }
         return BudgetSummary(total = expenses.sumOf { it.amount }, paid = paid, share = share)
     }
+
+    /** 분류별 합계 (큰 금액 순) */
+    fun byCategory(expenses: List<Expense>): List<Pair<String, Long>> =
+        expenses.groupBy { it.category }
+            .map { (category, list) -> category to list.sumOf { it.amount } }
+            .filter { it.second > 0 }
+            .sortedByDescending { it.second }
+
+    /**
+     * 누가 누구에게 얼마를 보내면 정산이 끝나는지 계산합니다.
+     * 보낼 돈이 큰 사람과 받을 돈이 큰 사람부터 짝지어 송금 횟수를 줄입니다.
+     */
+    fun transfers(members: List<String>, summary: BudgetSummary): List<Transfer> {
+        val receivers = members.map { it to summary.balanceOf(it) }.filter { it.second > 0 }
+            .sortedByDescending { it.second }.map { it.first to it.second }.toMutableList()
+        val senders = members.map { it to -summary.balanceOf(it) }.filter { it.second > 0 }
+            .sortedByDescending { it.second }.map { it.first to it.second }.toMutableList()
+        val result = mutableListOf<Transfer>()
+        var r = 0
+        var s = 0
+        while (r < receivers.size && s < senders.size) {
+            val (toUid, need) = receivers[r]
+            val (fromUid, owe) = senders[s]
+            val amount = minOf(need, owe)
+            if (amount > 0) result += Transfer(from = fromUid, to = toUid, amount = amount)
+            receivers[r] = toUid to (need - amount)
+            senders[s] = fromUid to (owe - amount)
+            if (receivers[r].second == 0L) r++
+            if (senders[s].second == 0L) s++
+        }
+        return result
+    }
 }
+
+/** 정산 송금 1건: from 이 to 에게 amount 원 보내기 */
+data class Transfer(val from: String, val to: String, val amount: Long)
