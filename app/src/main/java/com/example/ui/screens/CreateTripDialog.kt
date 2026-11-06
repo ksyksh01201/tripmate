@@ -24,8 +24,6 @@ import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DatePickerDialog
-import androidx.compose.material3.DateRangePicker
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -33,11 +31,9 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.SelectableDates
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.DateRangePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -301,8 +297,7 @@ private fun CompanionChips(selected: CompanionType?, onSelect: (CompanionType) -
     }
 }
 
-/** 달력 팝업: 시작일과 종료일을 한 번에 고릅니다. 오늘 이전 날짜는 고를 수 없습니다. */
-@OptIn(ExperimentalMaterial3Api::class)
+/** 달력 팝업: 시작일과 종료일을 한 번에 고릅니다. 오늘 이전 날짜는 고를 수 없습니다. (화면은 KoreanDateRangePicker.kt) */
 @Composable
 private fun TripDateRangePickerDialog(
     initialStart: Long?,
@@ -311,58 +306,13 @@ private fun TripDateRangePickerDialog(
     onConfirm: (start: Long, end: Long) -> Unit
 ) {
     val todayUtcMillis = remember { todayAsUtcMillis() }
-    // 기기 언어와 상관없이 달력을 한국어로 표시 (요일: 일 월 화..., 월: 2026년 11월)
-    // 달력 안의 요일/월 글자는 이 state의 locale을 따르기 때문에 여기서 한국어를 지정합니다.
-    val state = remember {
-        DateRangePickerState(
-            locale = Locale.KOREA,
-            initialSelectedStartDateMillis = initialStart,
-            initialSelectedEndDateMillis = initialEnd,
-            selectableDates = object : SelectableDates {
-                override fun isSelectableDate(utcTimeMillis: Long): Boolean = utcTimeMillis >= todayUtcMillis
-            }
-        )
-    }
-    val start = state.selectedStartDateMillis
-    val end = state.selectedEndDateMillis
-    val hasSelection = start != null
-
-    DatePickerDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = {
-            // 날짜를 하나도 고르지 않았으면 확인 버튼은 비활성화
-            TextButton(
-                enabled = hasSelection,
-                // 종료일을 안 고르면 당일치기로 봅니다.
-                onClick = { start?.let { onConfirm(it, end ?: it) } }
-            ) { Text("확인", color = if (hasSelection) Blue else Placeholder) }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("취소", color = Blue) }
-        }
-    ) {
-        // 달력은 위아래로 스크롤하면 다음 달/이전 달로 넘어갑니다.
-        // 요일 줄과 "2026년 11월" 같은 월 제목은 글자일 뿐이라 눌러도 아무 동작이 없습니다.
-        DateRangePicker(
-            state = state,
-            modifier = Modifier.weight(1f),
-            title = {
-                Text(
-                    text = "여행 날짜를 선택하세요",
-                    modifier = Modifier.padding(start = 24.dp, top = 16.dp),
-                    fontWeight = FontWeight.Bold
-                )
-            },
-            headline = {
-                Text(
-                    text = "${start?.toDisplayDate() ?: "시작일"} - ${end?.toDisplayDate() ?: "종료일"}",
-                    modifier = Modifier.padding(start = 24.dp, end = 12.dp, bottom = 12.dp),
-                    fontSize = 22.sp
-                )
-            },
-            showModeToggle = false
-        )
-    }
+    KoreanDateRangePickerDialog(
+        initialStart = initialStart,
+        initialEnd = initialEnd,
+        todayMillis = todayUtcMillis,
+        onDismiss = onDismiss,
+        onConfirm = onConfirm
+    )
 }
 
 // ---------- 두 팝업에서 함께 쓰는 작은 컴포넌트 ----------
