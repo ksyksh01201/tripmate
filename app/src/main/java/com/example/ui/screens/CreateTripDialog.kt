@@ -85,6 +85,8 @@ fun CreateTripDialog(
     var endMillis by rememberSaveable { mutableStateOf<Long?>(null) }
     var companion by rememberSaveable { mutableStateOf<CompanionType?>(null) }
     var showDatePicker by remember { mutableStateOf(false) }
+    // 종료일 칸을 눌러서 열었으면 달력도 종료일 고르기부터 시작
+    var openAtEnd by remember { mutableStateOf(false) }
 
     val canSubmit = destination != null && startMillis != null && endMillis != null &&
         companion != null && !isSubmitting
@@ -123,7 +125,8 @@ fun CreateTripDialog(
                 DateRangeField(
                     startMillis = startMillis,
                     endMillis = endMillis,
-                    onClick = { showDatePicker = true }
+                    onStartClick = { openAtEnd = false; showDatePicker = true },
+                    onEndClick = { openAtEnd = true; showDatePicker = true }
                 )
 
                 Spacer(Modifier.height(20.dp))
@@ -170,6 +173,7 @@ fun CreateTripDialog(
         TripDateRangePickerDialog(
             initialStart = startMillis,
             initialEnd = endMillis,
+            openAtEnd = openAtEnd,
             onDismiss = { showDatePicker = false },
             onConfirm = { start, end ->
                 startMillis = start
@@ -220,7 +224,12 @@ private fun CityDropdown(selected: String?, onSelect: (String) -> Unit) {
 }
 
 @Composable
-private fun DateRangeField(startMillis: Long?, endMillis: Long?, onClick: () -> Unit) {
+private fun DateRangeField(
+    startMillis: Long?,
+    endMillis: Long?,
+    onStartClick: () -> Unit,
+    onEndClick: () -> Unit
+) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically
@@ -231,7 +240,7 @@ private fun DateRangeField(startMillis: Long?, endMillis: Long?, onClick: () -> 
             trailing = {
                 Icon(Icons.Outlined.CalendarMonth, contentDescription = "달력 열기", tint = Blue)
             },
-            onClick = onClick,
+            onClick = onStartClick,
             modifier = Modifier
                 .weight(1f)
                 .testTag("create_trip_start_date_field")
@@ -247,7 +256,7 @@ private fun DateRangeField(startMillis: Long?, endMillis: Long?, onClick: () -> 
             trailing = {
                 Icon(Icons.Outlined.CalendarMonth, contentDescription = "달력 열기", tint = Blue)
             },
-            onClick = onClick,
+            onClick = onEndClick,
             modifier = Modifier
                 .weight(1f)
                 .testTag("create_trip_end_date_field")
@@ -302,6 +311,7 @@ private fun CompanionChips(selected: CompanionType?, onSelect: (CompanionType) -
 private fun TripDateRangePickerDialog(
     initialStart: Long?,
     initialEnd: Long?,
+    openAtEnd: Boolean,
     onDismiss: () -> Unit,
     onConfirm: (start: Long, end: Long) -> Unit
 ) {
@@ -309,6 +319,7 @@ private fun TripDateRangePickerDialog(
     KoreanDateRangePickerDialog(
         initialStart = initialStart,
         initialEnd = initialEnd,
+        startWithEnd = openAtEnd,
         todayMillis = todayUtcMillis,
         onDismiss = onDismiss,
         onConfirm = onConfirm

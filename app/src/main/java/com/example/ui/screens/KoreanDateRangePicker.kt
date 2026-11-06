@@ -74,6 +74,7 @@ private val WeekdayLabels = listOf("일", "월", "화", "수", "목", "금", "�
 internal fun KoreanDateRangePickerDialog(
     initialStart: Long?,
     initialEnd: Long?,
+    startWithEnd: Boolean = false,
     todayMillis: Long,
     onDismiss: () -> Unit,
     onConfirm: (start: Long, end: Long) -> Unit
@@ -99,7 +100,8 @@ internal fun KoreanDateRangePickerDialog(
     val scope = rememberCoroutineScope()
 
     // 지금 고르는 칸: 위의 [시작일] / [종료일] 칸을 눌러서 바꿉니다.
-    var pickingEnd by remember { mutableStateOf(false) }
+    // 종료일 칸으로 열었고 시작일이 이미 있으면 종료일 고르기부터 시작
+    var pickingEnd by remember { mutableStateOf(startWithEnd && initialStart != null) }
 
     val s = start
     val e = end
