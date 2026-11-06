@@ -1,5 +1,11 @@
 package com.example.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -183,7 +189,6 @@ private fun TripListScreen(
         .filter { (dayNumber(it.endDate) ?: Long.MAX_VALUE) < today }
         .sortedByDescending { it.endDate }
     var showAllPast by rememberSaveable { mutableStateOf(false) }
-    val shownPast = if (showAllPast) past else past.take(PAST_PREVIEW_COUNT)
 
     Column(
         modifier = Modifier
@@ -238,11 +243,29 @@ private fun TripListScreen(
 
             if (past.isNotEmpty()) {
                 item { SectionTitle("지난 여행", topPadding = 10.dp) }
-                items(shownPast, key = { it.tripId }) { trip ->
+                items(past.take(PAST_PREVIEW_COUNT), key = { it.tripId }) { trip ->
                     PastTripCard(trip = trip, onClick = { onTripClick(trip) })
                 }
                 if (past.size > PAST_PREVIEW_COUNT) {
-                    item {
+                    item(key = "past_more") {
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                        // "여행 전체보기"를 누르면 나머지 지난 여행이 위에서 아래로 촤르륵 펼쳐짐
+                        AnimatedVisibility(
+                            visible = showAllPast,
+                            enter = expandVertically(animationSpec = tween(450), expandFrom = Alignment.Top) +
+                                fadeIn(animationSpec = tween(450)),
+                            exit = shrinkVertically(animationSpec = tween(350), shrinkTowards = Alignment.Top) +
+                                fadeOut(animationSpec = tween(250))
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(bottom = 20.dp),
+                                verticalArrangement = Arrangement.spacedBy(20.dp)
+                            ) {
+                                past.drop(PAST_PREVIEW_COUNT).forEach { trip ->
+                                    PastTripCard(trip = trip, onClick = { onTripClick(trip) })
+                                }
+                            }
+                        }
                         Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                             Text(
                                 text = if (showAllPast) "접기  ∧" else "여행 전체보기  >",
@@ -255,6 +278,7 @@ private fun TripListScreen(
                                 fontWeight = FontWeight.Medium,
                                 color = SubGray
                             )
+                        }
                         }
                     }
                 }
