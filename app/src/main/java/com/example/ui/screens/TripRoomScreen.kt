@@ -422,7 +422,7 @@ private fun RowScope.BottomTab(
 }
 
 /** "2026-08-01", "2026-08-03" → "2026년 8월 1일 ~ 8월 3일" (해가 바뀌면 종료일에도 연도 표시) */
-private fun koreanDateRange(start: String, end: String): String {
+internal fun koreanDateRange(start: String, end: String): String {
     fun parse(s: String) = s.split("-").mapNotNull { it.toIntOrNull() }.takeIf { it.size == 3 }
     val a = parse(start) ?: return ""
     val b = parse(end) ?: return "${a[0]}년 ${a[1]}월 ${a[2]}일"
