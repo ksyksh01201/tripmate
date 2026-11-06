@@ -7,7 +7,6 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -17,25 +16,16 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -45,51 +35,24 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.data.Trip
-import com.example.data.model.TripHelper
 import com.example.ui.components.SuitcaseIllustration
 import com.example.ui.components.TripMateLogo
-import com.example.ui.viewmodel.HomeViewModel
-
-private val HomeBlue = Color(0xFF4A90E2)
-
-private enum class HomeDialog { None, Create, Join }
+import com.example.ui.theme.TripMateBlue
+import com.example.ui.theme.TripMateTextPrimary
+import com.example.ui.theme.TripMateTextSecondary
 
 /**
- * 로그인 이후 표시되는 TripMate 홈 화면.
- * - 여행이 없으면: 여행가방 아이콘 + "첫 여행을 시작해 볼까요?" 빈 화면
- * - 여행이 있으면: "내 여행" 목록 + 하단 [여행 생성] [초대코드 참여] 버튼
- * 여행을 만들거나 참여하면 onOpenTrip(tripId)로 여행룸으로 이동합니다.
+ * 로그인 이후 표시되는 TripMate 홈 화면
+ * 첨부된 이미지(IMG_4546_5a206f00.jpeg)의 UI를 그대로 구현하며,
+ * 여행가방 아이콘과 “첫 여행을 시작해 볼까요?” 문구가 있는 빈 상태 화면입니다.
+ * 현재 단계에서는 UI 디자인 전용 단계이므로 홈 화면의 모든 버튼과 아이콘은 클릭 시 동작하지 않습니다.
  */
 @Composable
 fun HomeScreen(
-    onOpenTrip: (tripId: String) -> Unit,
     modifier: Modifier = Modifier,
-    viewModel: HomeViewModel = viewModel()
+    onCreateTripClick: () -> Unit = {},
+    onJoinTripClick: () -> Unit = {}
 ) {
-    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val trips by viewModel.myTrips.collectAsStateWithLifecycle()
-    var dialog by rememberSaveable { mutableStateOf(HomeDialog.None) }
-
-    // 생성/참여가 끝나면 팝업을 닫고 여행룸으로 이동
-    LaunchedEffect(uiState.openTripId) {
-        val tripId = uiState.openTripId ?: return@LaunchedEffect
-        dialog = HomeDialog.None
-        viewModel.onTripOpened()
-        onOpenTrip(tripId)
-    }
-
-    val openCreate = {
-        viewModel.clearError()
-        dialog = HomeDialog.Create
-    }
-    val openJoin = {
-        viewModel.clearError()
-        dialog = HomeDialog.Join
-    }
-
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -97,243 +60,99 @@ fun HomeScreen(
             .statusBarsPadding()
             .navigationBarsPadding()
     ) {
-        Column(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier.fillMaxSize()
+        ) {
+            // 상단 앱 바: 왼쪽 파란색 tripmate 로고, 오른쪽 회색 설정 아이콘
             HomeTopBar()
 
-            val currentTrips = trips
-            when {
-                currentTrips == null -> Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
-                    contentAlignment = Alignment.Center
-                ) { CircularProgressIndicator(color = HomeBlue) }
+            // 중앙 및 하단 영역
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .padding(horizontal = 28.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Spacer(modifier = Modifier.weight(0.9f))
 
-                currentTrips.isEmpty() -> EmptyHomeContent(
-                    modifier = Modifier.weight(1f),
-                    onCreateClick = openCreate,
-                    onJoinClick = openJoin
-                )
+                // 2. 여행가방 아이콘: 170px 원형 배경(#E3EEFC) + 75px 여행가방 아이콘(#4A90E2)
+                SuitcaseIllustration()
 
-                else -> TripListContent(
-                    trips = currentTrips,
-                    modifier = Modifier.weight(1f),
-                    onTripClick = { onOpenTrip(it.tripId) },
-                    onCreateClick = openCreate,
-                    onJoinClick = openJoin
-                )
-            }
-        }
-    }
+                Spacer(modifier = Modifier.height(32.dp))
 
-    when (dialog) {
-        HomeDialog.Create -> CreateTripDialog(
-            isSubmitting = uiState.isSubmitting,
-            errorMessage = uiState.errorMessage,
-            onDismiss = { dialog = HomeDialog.None },
-            onCreate = { destination, start, end, companion ->
-                viewModel.createTrip(destination, start, end, companion)
-            }
-        )
-
-        HomeDialog.Join -> JoinTripDialog(
-            isSubmitting = uiState.isSubmitting,
-            errorMessage = uiState.errorMessage,
-            onDismiss = { dialog = HomeDialog.None },
-            onCodeChange = { if (uiState.errorMessage != null) viewModel.clearError() },
-            onJoin = { code -> viewModel.joinTrip(code) }
-        )
-
-        HomeDialog.None -> Unit
-    }
-}
-
-/** 여행이 하나도 없을 때의 빈 화면 (기존 디자인 그대로) */
-@Composable
-private fun EmptyHomeContent(
-    modifier: Modifier,
-    onCreateClick: () -> Unit,
-    onJoinClick: () -> Unit
-) {
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 28.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Spacer(modifier = Modifier.weight(0.9f))
-
-        SuitcaseIllustration()
-
-        Spacer(modifier = Modifier.height(32.dp))
-
-        Text(
-            text = "첫 여행을 시작해 볼까요?",
-            fontSize = 28.sp,
-            fontWeight = FontWeight.Bold,
-            color = Color.Black,
-            textAlign = TextAlign.Center,
-            letterSpacing = (-0.5).sp
-        )
-
-        Spacer(modifier = Modifier.height(14.dp))
-
-        Text(
-            text = "새 여행을 만들거나\n친구의 초대 코드로 참여해 보세요",
-            fontSize = 16.sp,
-            color = Color(0xFF808080),
-            textAlign = TextAlign.Center,
-            lineHeight = 24.sp
-        )
-
-        Spacer(modifier = Modifier.height(40.dp))
-
-        Button(
-            onClick = onCreateClick,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(60.dp)
-                .testTag("empty_create_trip_button"),
-            shape = RoundedCornerShape(10.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = HomeBlue,
-                contentColor = Color.White
-            )
-        ) {
-            Text(text = "새 여행 만들기", fontSize = 16.sp, fontWeight = FontWeight.Bold)
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        OutlinedBlueButton(
-            text = "초대 코드로 참여하기",
-            onClick = onJoinClick,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(60.dp)
-                .testTag("empty_join_trip_button")
-        )
-
-        Spacer(modifier = Modifier.weight(1.3f))
-    }
-}
-
-/** 여행이 있을 때: 내 여행 목록 + 하단 버튼 2개 */
-@Composable
-private fun TripListContent(
-    trips: List<Trip>,
-    modifier: Modifier,
-    onTripClick: (Trip) -> Unit,
-    onCreateClick: () -> Unit,
-    onJoinClick: () -> Unit
-) {
-    Column(modifier = modifier.fillMaxWidth()) {
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f),
-            contentPadding = PaddingValues(horizontal = 24.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            item {
+                // 3. 메인 제목: "첫 여행을 시작해 볼까요?", 28px, 굵기 700~800, 검은색, 중앙 정렬
                 Text(
-                    text = "내 여행",
-                    fontSize = 18.sp,
+                    text = "첫 여행을 시작해 볼까요?",
+                    fontSize = 28.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color.Black,
-                    modifier = Modifier.padding(bottom = 4.dp)
+                    textAlign = TextAlign.Center,
+                    letterSpacing = (-0.5).sp
                 )
-            }
-            items(trips, key = { it.tripId }) { trip ->
-                TripCard(trip = trip, onClick = { onTripClick(trip) })
-            }
-        }
 
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp, vertical = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Button(
-                onClick = onCreateClick,
-                modifier = Modifier
-                    .weight(1f)
-                    .height(54.dp)
-                    .testTag("home_create_trip_button"),
-                shape = RoundedCornerShape(10.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = HomeBlue, contentColor = Color.White)
-            ) {
-                Text("여행 생성", fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // 4. 안내 문구: 두 줄 표시, 16px, #808080, 중앙 정렬, 적정 줄 간격
+                Text(
+                    text = "새 여행을 만들거나\n친구의 초대 코드로 참여해 보세요",
+                    fontSize = 16.sp,
+                    color = Color(0xFF808080),
+                    textAlign = TextAlign.Center,
+                    lineHeight = 24.sp
+                )
+
+                Spacer(modifier = Modifier.height(40.dp))
+
+                // 5. 첫 번째 버튼: "새 여행 만들기", 배경 #4A90E2, 흰색 글씨, 굵기 700, 높이 60px, 모서리 10px (비활성 유지)
+                Button(
+                    onClick = onCreateTripClick,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(60.dp)
+                        .testTag("empty_create_trip_button"),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF4A90E2),
+                        contentColor = Color.White
+                    )
+                ) {
+                    Text(
+                        text = "새 여행 만들기",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // 5. 두 번째 버튼: "초대 코드로 참여하기", 배경 흰색, 테두리 파란색 1px, 글씨 #4A90E2, 높이 60px, 모서리 10px (비활성 유지)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(60.dp)
+                        .background(Color.White, RoundedCornerShape(10.dp))
+                        .border(1.dp, Color(0xFF4A90E2), RoundedCornerShape(10.dp))
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                            onClick = onJoinTripClick
+                        )
+                        .testTag("empty_join_trip_button"),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "초대 코드로 참여하기",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF4A90E2)
+                    )
+                }
+
+                Spacer(modifier = Modifier.weight(1.3f))
             }
-            OutlinedBlueButton(
-                text = "초대코드 참여",
-                onClick = onJoinClick,
-                modifier = Modifier
-                    .weight(1f)
-                    .height(54.dp)
-                    .testTag("home_join_trip_button")
-            )
         }
-    }
-}
-
-@Composable
-private fun TripCard(trip: Trip, onClick: () -> Unit) {
-    val dDay = TripHelper.calculateDDay(trip.startDate)
-    val dDayText = when {
-        dDay == 0 -> "D-Day"
-        dDay < 0 -> "D$dDay"
-        else -> "D+$dDay"
-    }
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .border(1.dp, Color(0xFFE0E3E8), RoundedCornerShape(16.dp))
-            .clickable(onClick = onClick)
-            .padding(18.dp)
-            .testTag("trip_card_${trip.tripId}")
-    ) {
-        Box(
-            modifier = Modifier
-                .clip(RoundedCornerShape(10.dp))
-                .background(Color(0xFFE3EEFC))
-                .padding(horizontal = 10.dp, vertical = 3.dp)
-        ) {
-            Text(dDayText, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = HomeBlue)
-        }
-        Spacer(Modifier.height(8.dp))
-        Text(trip.title, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.Black)
-        Spacer(Modifier.height(4.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(trip.dateRangeText, fontSize = 13.sp, color = Color(0xFF808080), modifier = Modifier.weight(1f))
-            Icon(
-                Icons.Outlined.Person,
-                contentDescription = null,
-                tint = Color(0xFF808080),
-                modifier = Modifier.size(16.dp)
-            )
-            Text("${trip.memberCount}", fontSize = 13.sp, color = Color(0xFF808080))
-        }
-    }
-}
-
-@Composable
-private fun OutlinedBlueButton(text: String, onClick: () -> Unit, modifier: Modifier) {
-    Box(
-        modifier = modifier
-            .background(Color.White, RoundedCornerShape(10.dp))
-            .border(1.dp, HomeBlue, RoundedCornerShape(10.dp))
-            .clip(RoundedCornerShape(10.dp))
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onClick
-            ),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(text = text, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = HomeBlue)
     }
 }
 
@@ -347,12 +166,12 @@ private fun HomeTopBar() {
         verticalAlignment = Alignment.CenterVertically
     ) {
         TripMateLogo(
-            color = HomeBlue,
+            color = Color(0xFF4A90E2),
             fontSize = 32.sp
         )
         IconButton(
             onClick = {
-                // 설정 화면은 다음 단계에서 연결
+                // 현재 UI 단계: 클릭 동작 없음
             },
             modifier = Modifier
                 .size(40.dp)

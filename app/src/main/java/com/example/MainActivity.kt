@@ -16,7 +16,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import com.example.ui.navigation.Screen
-import com.example.ui.screens.HomeScreen
+import com.example.ui.screens.HomeRoute
 import com.example.ui.screens.LoginScreen
 import com.example.ui.screens.SignUpScreen
 import com.example.ui.screens.SplashScreen
@@ -75,7 +75,7 @@ fun TripMateApp() {
             BackHandler {
                 currentScreen = Screen.Login
             }
-            HomeScreen(
+            HomeRoute(
                 onOpenTrip = { tripId ->
                     currentTripId = tripId
                     currentScreen = Screen.TripRoom
