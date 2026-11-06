@@ -108,6 +108,8 @@ fun TripRoomScreen(
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
     val loaded = uiState as? TripRoomUiState.Loaded
+    // 하단 탭: 여행홈 / 일정(준비 중) / 가계부
+    var currentTab by rememberSaveable { mutableStateOf(RoomTab.Home) }
 
     val copyInviteCode: (String) -> Unit = { code ->
         clipboard.setText(AnnotatedString(code))
@@ -124,7 +126,8 @@ fun TripRoomScreen(
             myUid = loaded?.myUid,
             onBack = onBack,
             onEdit = { Toast.makeText(context, "편집 기능은 준비 중이에요", Toast.LENGTH_SHORT).show() },
-            onInvite = { loaded?.trip?.inviteCode?.let(copyInviteCode) }
+            onInvite = { loaded?.trip?.inviteCode?.let(copyInviteCode) },
+            showMembers = currentTab == RoomTab.Home
         )
 
         Box(
@@ -137,7 +140,9 @@ fun TripRoomScreen(
                 TripRoomUiState.Loading -> CircularProgressIndicator(color = RoomBlue)
                 TripRoomUiState.NotFound -> CenterMessage("여행을 찾을 수 없어요.\n삭제되었거나 잘못된 링크일 수 있어요.")
                 is TripRoomUiState.Error -> CenterMessage(state.message)
-                is TripRoomUiState.Loaded -> {
+                is TripRoomUiState.Loaded -> if (currentTab == RoomTab.Budget) {
+                    BudgetContent(trip = state.trip, myUid = state.myUid)
+                } else {
                     // 인원수가 바뀌면 부드럽게 화면 전환
                     AnimatedContent(
                         targetState = state.trip.isWaitingForMates,
@@ -169,8 +174,13 @@ fun TripRoomScreen(
         }
 
         TripRoomBottomBar(
-            onNotReady = { name ->
-                Toast.makeText(context, "$name 기능은 준비 중이에요", Toast.LENGTH_SHORT).show()
+            selected = currentTab,
+            onSelect = { tab ->
+                if (tab == RoomTab.Schedule) {
+                    Toast.makeText(context, "일정 기능은 준비 중이에요", Toast.LENGTH_SHORT).show()
+                } else {
+                    currentTab = tab
+                }
             }
         )
     }
@@ -183,7 +193,8 @@ private fun TripRoomHeader(
     myUid: String?,
     onBack: () -> Unit,
     onEdit: () -> Unit,
-    onInvite: () -> Unit
+    onInvite: () -> Unit,
+    showMembers: Boolean = true
 ) {
     val shape = RoundedCornerShape(bottomStart = 30.dp, bottomEnd = 30.dp)
     Column(
@@ -240,7 +251,7 @@ private fun TripRoomHeader(
                 color = Color(0xFFFCFCFC)
             )
             Spacer(Modifier.height(18.dp))
-            if (trip != null) {
+            if (trip != null && showMembers) {
                 MemberRow(members = trip.members, myUid = myUid, onInvite = onInvite)
             }
         }
@@ -389,9 +400,12 @@ private fun InviteMatesCard(inviteCode: String, onCopy: () -> Unit) {
     }
 }
 
-/** 하단 탭: 여행홈(현재) / 일정 / 가계부 */
+/** 여행룸 하단 탭 */
+enum class RoomTab { Home, Schedule, Budget }
+
+/** 하단 탭: 여행홈 / 일정 / 가계부 */
 @Composable
-private fun TripRoomBottomBar(onNotReady: (String) -> Unit) {
+private fun TripRoomBottomBar(selected: RoomTab, onSelect: (RoomTab) -> Unit) {
     Column(modifier = Modifier.background(Color.White)) {
         HorizontalDivider(color = Color(0xFFE3E3E3))
         Row(
@@ -401,9 +415,9 @@ private fun TripRoomBottomBar(onNotReady: (String) -> Unit) {
                 .height(96.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            BottomTab(Icons.Outlined.Home, "여행홈", selected = true, tag = "tab_home") {}
-            BottomTab(Icons.Outlined.CalendarMonth, "일정", selected = false, tag = "tab_schedule") { onNotReady("일정") }
-            BottomTab(Icons.Outlined.Calculate, "가계부", selected = false, tag = "tab_budget") { onNotReady("가계부") }
+            BottomTab(Icons.Outlined.Home, "여행홈", selected = selected == RoomTab.Home, tag = "tab_home") { onSelect(RoomTab.Home) }
+            BottomTab(Icons.Outlined.CalendarMonth, "일정", selected = selected == RoomTab.Schedule, tag = "tab_schedule") { onSelect(RoomTab.Schedule) }
+            BottomTab(Icons.Outlined.Calculate, "가계부", selected = selected == RoomTab.Budget, tag = "tab_budget") { onSelect(RoomTab.Budget) }
         }
     }
 }
