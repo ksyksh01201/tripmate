@@ -98,9 +98,11 @@ internal fun KoreanDateRangePickerDialog(
     val pagerState = rememberPagerState(initialPage = firstPage) { months.size }
     val scope = rememberCoroutineScope()
 
+    // 지금 고르는 칸: 위의 [시작일] / [종료일] 칸을 눌러서 바꿉니다.
+    var pickingEnd by remember { mutableStateOf(false) }
+
     val s = start
     val e = end
-    val headline = "${s?.let(::koreanDate) ?: "시작일"} - ${e?.let(::koreanDate) ?: "종료일"}"
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -122,12 +124,27 @@ internal fun KoreanDateRangePickerDialog(
                     fontWeight = FontWeight.Bold,
                     color = CalSub
                 )
-                Text(
-                    text = headline,
-                    modifier = Modifier.padding(start = 24.dp, top = 6.dp, bottom = 14.dp),
-                    fontSize = 24.sp,
-                    color = CalText
-                )
+                // [시작일] - [종료일] 칸: 누른 칸이 파랗게 표시되고, 달력에서 고른 날짜는 그 칸에만 들어갑니다.
+                Row(
+                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    DateSlot(
+                        label = "시작일",
+                        value = s?.let(::koreanDate),
+                        active = !pickingEnd,
+                        tag = "calendar_start_slot",
+                        onClick = { pickingEnd = false }
+                    )
+                    Text(" - ", fontSize = 22.sp, color = CalSub)
+                    DateSlot(
+                        label = "종료일",
+                        value = e?.let(::koreanDate),
+                        active = pickingEnd,
+                        tag = "calendar_end_slot",
+                        onClick = { pickingEnd = true }
+                    )
+                }
                 HorizontalDivider(color = Color(0xFFE0E3E8))
 
                 // 요일 줄 (글자만, 클릭 안 됨)
@@ -172,13 +189,18 @@ internal fun KoreanDateRangePickerDialog(
                             todayMillis = todayMillis,
                             start = s,
                             end = e,
+                            // 종료일을 고를 때는 시작일보다 앞 날짜를 막습니다.
+                            minSelectable = if (pickingEnd && s != null) maxOf(s, todayMillis) else todayMillis,
                             onDayClick = { day ->
-                                when {
-                                    // 처음 고르거나, 이미 둘 다 골랐으면 새로 시작
-                                    s == null || e != null -> { start = day; end = null }
-                                    // 시작일보다 앞을 누르면 시작일을 바꿈
-                                    day < s -> start = day
-                                    else -> end = day
+                                if (pickingEnd) {
+                                    // 종료일 칸: 종료일만 바뀜
+                                    end = day
+                                } else {
+                                    // 시작일 칸: 시작일만 바뀜 (종료일이 시작일보다 앞이 되면 종료일은 비움)
+                                    start = day
+                                    if (e != null && e < day) end = null
+                                    // 시작일을 골랐으면 다음은 종료일 칸으로 자동 이동
+                                    pickingEnd = true
                                 }
                             }
                         )
@@ -238,6 +260,7 @@ private fun MonthArrow(
 private fun MonthBlock(
     month: MonthInfo,
     todayMillis: Long,
+    minSelectable: Long,
     start: Long?,
     end: Long?,
     onDayClick: (Long) -> Unit
@@ -267,6 +290,7 @@ private fun MonthBlock(
                                 day = dayNum,
                                 millis = month.firstDayMillis + (dayNum - 1) * DAY_MILLIS,
                                 todayMillis = todayMillis,
+                                minSelectable = minSelectable,
                                 start = start,
                                 end = end,
                                 onClick = onDayClick
@@ -284,11 +308,12 @@ private fun DayCell(
     day: Int,
     millis: Long,
     todayMillis: Long,
+    minSelectable: Long,
     start: Long?,
     end: Long?,
     onClick: (Long) -> Unit
 ) {
-    val enabled = millis >= todayMillis
+    val enabled = millis >= minSelectable
     val isEdge = millis == start || millis == end
     val isToday = millis == todayMillis
     val hasRange = start != null && end != null && end > start
@@ -369,4 +394,32 @@ private fun koreanDate(millis: Long): String {
         Locale.KOREA, "%d.%02d.%02d",
         c.get(Calendar.YEAR), c.get(Calendar.MONTH) + 1, c.get(Calendar.DAY_OF_MONTH)
     )
+}
+
+/** 위쪽 [시작일] / [종료일] 칸. 지금 고르는 칸은 파란 테두리 + 연한 파란 배경 */
+@Composable
+private fun DateSlot(
+    label: String,
+    value: String?,
+    active: Boolean,
+    tag: String,
+    onClick: () -> Unit
+) {
+    val shape = RoundedCornerShape(12.dp)
+    Column(
+        modifier = Modifier
+            .clip(shape)
+            .background(if (active) Color(0xFFE3EEFC) else Color.Transparent)
+            .border(if (active) 2.dp else 1.dp, if (active) CalBlue else Color(0xFFE0E3E8), shape)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 6.dp)
+            .testTag(tag)
+    ) {
+        Text(label, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = if (active) CalBlue else CalSub)
+        Text(
+            text = value ?: "선택",
+            fontSize = 18.sp,
+            color = if (value != null) CalText else CalDisabled
+        )
+    }
 }
