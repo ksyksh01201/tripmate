@@ -17,7 +17,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -27,9 +30,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.DirectionsWalk
-import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.outlined.Calculate
+import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.CalendarMonth
-import androidx.compose.material.icons.outlined.GroupAdd
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -44,6 +49,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -59,12 +71,17 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.example.data.Trip
+import com.example.ui.components.TripMateLogo
 import com.example.ui.viewmodel.TripRoomUiState
 import com.example.ui.viewmodel.TripRoomViewModel
 
 private val RoomBlue = Color(0xFF4A90E2)
 private val RoomBlueLight = Color(0xFFE3EEFC)
 private val RoomGray = Color(0xFF808080)
+private val HeaderBlue = Color(0xFF5B8DE3)
+private val RoomBackground = Color(0xFFF7F8FA)
+private val CodeBoxBlue = Color(0xFFEAF2FD)
+private val CopyButtonBlue = Color(0xFF6F9DE6)
 private val AvatarColors = listOf(
     Color(0xFF1E2B3E), Color(0xFFFA6B43), Color(0xFF4A90E2),
     Color(0xFF34C38F), Color(0xFF9B6BDF), Color(0xFFF5A623)
@@ -73,7 +90,7 @@ private val AvatarColors = listOf(
 /**
  * 여행룸 화면.
  * Firestore의 members 수를 실시간으로 보고 화면을 바꿉니다.
- * - members.size == 1 : "트립메이트를 초대하세요!" + 초대 코드 + [복사]
+ $1초대 코드 카드 (파란 상단 + 하단 탭은 공통)
  * - members.size >= 2 : "나의 여행 스타일은?" 밸런스 게임
  */
 @Composable
@@ -87,16 +104,27 @@ fun TripRoomScreen(
         factory = viewModelFactory { initializer { TripRoomViewModel(tripId) } }
     )
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    val clipboard = LocalClipboardManager.current
+    val loaded = uiState as? TripRoomUiState.Loaded
+
+    val copyInviteCode: (String) -> Unit = { code ->
+        clipboard.setText(AnnotatedString(code))
+        Toast.makeText(context, "초대 코드가 복사되었어요", Toast.LENGTH_SHORT).show()
+    }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.White)
-            .statusBarsPadding()
-            .navigationBarsPadding()
+            .background(RoomBackground)
     ) {
-        val trip = (uiState as? TripRoomUiState.Loaded)?.trip
-        TripRoomTopBar(trip = trip, myUid = (uiState as? TripRoomUiState.Loaded)?.myUid, onBack = onBack)
+        TripRoomHeader(
+            trip = loaded?.trip,
+            myUid = loaded?.myUid,
+            onBack = onBack,
+            onEdit = { Toast.makeText(context, "편집 기능은 준비 중이에요", Toast.LENGTH_SHORT).show() },
+            onInvite = { loaded?.trip?.inviteCode?.let(copyInviteCode) }
+        )
 
         Box(
             modifier = Modifier
@@ -113,174 +141,293 @@ fun TripRoomScreen(
                     AnimatedContent(
                         targetState = state.trip.isWaitingForMates,
                         transitionSpec = { fadeIn() togetherWith fadeOut() },
+                        modifier = Modifier.fillMaxSize(),
                         label = "trip_room_branch"
                     ) { waiting ->
                         if (waiting) {
-                            InviteMatesContent(inviteCode = state.trip.inviteCode)
+                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+                                InviteMatesCard(
+                                    inviteCode = state.trip.inviteCode,
+                                    onCopy = { copyInviteCode(state.trip.inviteCode) }
+                                )
+                            }
                         } else {
-                            BalanceGameContent(onSelected = onTravelStyleSelected)
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .verticalScroll(rememberScrollState())
+                                    .padding(vertical = 24.dp),
+                                contentAlignment = Alignment.TopCenter
+                            ) {
+                                BalanceGameContent(onSelected = onTravelStyleSelected)
+                            }
                         }
                     }
                 }
             }
         }
+
+        TripRoomBottomBar(
+            onNotReady = { name ->
+                Toast.makeText(context, "$name 기능은 준비 중이에요", Toast.LENGTH_SHORT).show()
+            }
+        )
     }
 }
 
+/** 파란 상단 영역: ← tripmate 편집 / 여행 제목 / 날짜 / 멤버 + 초대 + 현재 N명 */
 @Composable
-private fun TripRoomTopBar(trip: Trip?, myUid: String?, onBack: () -> Unit) {
-    Row(
+private fun TripRoomHeader(
+    trip: Trip?,
+    myUid: String?,
+    onBack: () -> Unit,
+    onEdit: () -> Unit,
+    onInvite: () -> Unit
+) {
+    val shape = RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp)
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 8.dp, end = 20.dp, top = 8.dp, bottom = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .shadow(6.dp, shape)
+            .clip(shape)
+            .background(HeaderBlue)
+            .statusBarsPadding()
+            .padding(bottom = 22.dp)
     ) {
-        IconButton(onClick = onBack, modifier = Modifier.testTag("trip_room_back_button")) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "뒤로가기", tint = Color.Black)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 4.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            IconButton(
+                onClick = onBack,
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .testTag("trip_room_back_button")
+            ) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "뒤로가기", tint = Color.White)
+            }
+            TripMateLogo(color = Color.White, fontSize = 22.sp)
+            Text(
+                text = "편집",
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable(onClick = onEdit)
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                    .testTag("trip_room_edit_button"),
+                color = Color.White,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold
+            )
         }
-        Column(modifier = Modifier.weight(1f)) {
+
+        Column(modifier = Modifier.padding(horizontal = 28.dp)) {
+            Spacer(Modifier.height(8.dp))
             Text(
                 text = trip?.title.orEmpty(),
-                fontSize = 18.sp,
+                fontSize = 22.sp,
                 fontWeight = FontWeight.Bold,
-                color = Color.Black,
+                color = Color.White,
                 maxLines = 1
             )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = trip?.let { koreanDateRange(it.startDate, it.endDate) }.orEmpty(),
+                fontSize = 14.sp,
+                color = Color.White.copy(alpha = 0.9f)
+            )
+            Spacer(Modifier.height(18.dp))
             if (trip != null) {
-                Text(text = trip.dateRangeText, fontSize = 13.sp, color = RoomGray)
+                MemberRow(members = trip.members, myUid = myUid, onInvite = onInvite)
             }
-        }
-        if (trip != null) {
-            MemberAvatars(members = trip.members, myUid = myUid)
         }
     }
 }
 
-/** 상단 프로필 원형 아이콘. 인원수만큼 겹쳐서 보여줍니다. (최대 4개 + "+N") */
+/** 멤버 동그라미 + 점선 (+) 초대 버튼 + "현재 N명" */
 @Composable
-private fun MemberAvatars(members: List<String>, myUid: String?) {
+private fun MemberRow(members: List<String>, myUid: String?, onInvite: () -> Unit) {
     val maxShown = 4
-    val shown = members.take(maxShown)
     Row(
         modifier = Modifier.testTag("trip_room_member_avatars"),
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        shown.forEachIndexed { index, uid ->
+        members.take(maxShown).forEachIndexed { index, uid ->
             Box(
                 modifier = Modifier
-                    .offset(x = (-8 * index).dp)
                     .size(34.dp)
                     .clip(CircleShape)
-                    .background(AvatarColors[index % AvatarColors.size])
-                    .border(2.dp, Color.White, CircleShape),
+                    .background(AvatarColors[index % AvatarColors.size]),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     text = if (uid == myUid) "나" else "${index + 1}",
                     color = Color.White,
-                    fontSize = 13.sp,
+                    fontSize = 14.sp,
                     fontWeight = FontWeight.Bold
                 )
             }
         }
-        if (members.size > maxShown) {
+        // 점선 원 (+) : 누르면 초대 코드 복사
+        Box(
+            modifier = Modifier
+                .size(34.dp)
+                .clip(CircleShape)
+                .clickable(onClick = onInvite)
+                .drawBehind {
+                    drawCircle(
+                        color = Color.White,
+                        radius = size.minDimension / 2 - 1.dp.toPx(),
+                        style = Stroke(
+                            width = 1.5.dp.toPx(),
+                            pathEffect = PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(), 3.dp.toPx()))
+                        )
+                    )
+                }
+                .testTag("trip_room_invite_plus"),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(Icons.Filled.Add, contentDescription = "초대하기", tint = Color.White, modifier = Modifier.size(16.dp))
+        }
+        Spacer(Modifier.width(4.dp))
+        Text(
+            text = "현재 ${members.size}명",
+            color = Color.White,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold
+        )
+    }
+}
+
+/** Case A: 나 혼자일 때 - 초대 코드 카드 */
+@Composable
+private fun InviteMatesCard(inviteCode: String, onCopy: () -> Unit) {
+    val cardShape = RoundedCornerShape(18.dp)
+    Column(
+        modifier = Modifier
+            .padding(horizontal = 24.dp, vertical = 28.dp)
+            .fillMaxWidth()
+            .shadow(3.dp, cardShape)
+            .clip(cardShape)
+            .background(Color.White)
+            .padding(horizontal = 18.dp, vertical = 24.dp)
+    ) {
+        Text(
+            text = "트립메이트를 초대하세요!",
+            fontSize = 19.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color.Black
+        )
+        Spacer(Modifier.height(6.dp))
+        Text(
+            text = "코드를 전송하여 함께 여행을 계획하세요",
+            fontSize = 13.sp,
+            color = RoomGray
+        )
+        Spacer(Modifier.height(20.dp))
+
+        // 점선 테두리 초대 코드 박스 + [복사]
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
+                .background(CodeBoxBlue)
+                .drawBehind {
+                    val stroke = 1.5.dp.toPx()
+                    drawRoundRect(
+                        color = RoomBlue,
+                        topLeft = Offset(stroke / 2, stroke / 2),
+                        size = Size(size.width - stroke, size.height - stroke),
+                        cornerRadius = CornerRadius(14.dp.toPx() - stroke / 2),
+                        style = Stroke(
+                            width = stroke,
+                            pathEffect = PathEffect.dashPathEffect(floatArrayOf(5.dp.toPx(), 4.dp.toPx()))
+                        )
+                    )
+                }
+                .padding(start = 24.dp, end = 14.dp, top = 20.dp, bottom = 20.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Text(
-                text = "+${members.size - maxShown}",
-                modifier = Modifier.offset(x = (-8 * maxShown + 4).dp),
-                fontSize = 13.sp,
-                color = RoomGray
+                text = inviteCode,
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag("trip_room_invite_code"),
+                fontSize = 30.sp,
+                fontWeight = FontWeight.ExtraBold,
+                letterSpacing = 5.sp,
+                color = Color.Black,
+                maxLines = 1
+            )
+            Text(
+                text = "복사",
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(CopyButtonBlue)
+                    .clickable(onClick = onCopy)
+                    .padding(horizontal = 12.dp, vertical = 7.dp)
+                    .testTag("trip_room_copy_button"),
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.Black
             )
         }
     }
 }
 
-/** Case A: 나 혼자일 때 - 초대 코드 화면 */
+/** 하단 탭: 여행홈(현재) / 일정 / 가계부 */
 @Composable
-private fun InviteMatesContent(inviteCode: String) {
-    val clipboard = LocalClipboardManager.current
-    val context = LocalContext.current
+private fun TripRoomBottomBar(onNotReady: (String) -> Unit) {
+    Column(modifier = Modifier.background(Color.White)) {
+        HorizontalDivider(color = Color(0xFFE6E8EC))
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .height(72.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            BottomTab(Icons.Outlined.Home, "여행홈", selected = true, tag = "tab_home") {}
+            BottomTab(Icons.Outlined.CalendarMonth, "일정", selected = false, tag = "tab_schedule") { onNotReady("일정") }
+            BottomTab(Icons.Outlined.Calculate, "가계부", selected = false, tag = "tab_budget") { onNotReady("가계부") }
+        }
+    }
+}
 
+@Composable
+private fun RowScope.BottomTab(
+    icon: ImageVector,
+    label: String,
+    selected: Boolean,
+    tag: String,
+    onClick: () -> Unit
+) {
+    val color = if (selected) RoomBlue else Color(0xFF6B6F76)
     Column(
         modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 28.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+            .weight(1f)
+            .fillMaxHeight()
+            .clickable(onClick = onClick)
+            .testTag(tag),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
     ) {
-        Box(
-            modifier = Modifier
-                .size(140.dp)
-                .clip(CircleShape)
-                .background(RoomBlueLight),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(Icons.Outlined.GroupAdd, contentDescription = null, tint = RoomBlue, modifier = Modifier.size(64.dp))
-        }
-
-        Spacer(Modifier.height(28.dp))
-
-        Text(
-            text = "트립메이트를 초대하세요!",
-            fontSize = 26.sp,
-            fontWeight = FontWeight.Bold,
-            color = Color.Black,
-            textAlign = TextAlign.Center
-        )
-        Spacer(Modifier.height(12.dp))
-        Text(
-            text = "아래 초대 코드를 친구에게 보내면\n함께 여행을 계획할 수 있어요",
-            fontSize = 15.sp,
-            color = RoomGray,
-            textAlign = TextAlign.Center,
-            lineHeight = 22.sp
-        )
-
-        Spacer(Modifier.height(32.dp))
-
-        // 초대 코드 박스
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(14.dp))
-                .background(RoomBlueLight)
-                .padding(vertical = 22.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = inviteCode,
-                fontSize = 34.sp,
-                fontWeight = FontWeight.ExtraBold,
-                letterSpacing = 4.sp,
-                color = RoomBlue,
-                modifier = Modifier.testTag("trip_room_invite_code")
-            )
-        }
-
-        Spacer(Modifier.height(16.dp))
-
-        Button(
-            onClick = {
-                clipboard.setText(AnnotatedString(inviteCode))
-                Toast.makeText(context, "초대 코드가 복사되었어요", Toast.LENGTH_SHORT).show()
-            },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp)
-                .testTag("trip_room_copy_button"),
-            shape = RoundedCornerShape(10.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = RoomBlue, contentColor = Color.White)
-        ) {
-            Icon(Icons.Outlined.ContentCopy, contentDescription = null, modifier = Modifier.size(20.dp))
-            Spacer(Modifier.width(8.dp))
-            Text("복사", fontSize = 16.sp, fontWeight = FontWeight.Bold)
-        }
-
-        Spacer(Modifier.height(16.dp))
-        Text(
-            text = "친구가 들어오면 화면이 자동으로 바뀌어요",
-            fontSize = 13.sp,
-            color = Color(0xFFB0B0B0)
-        )
+        Icon(icon, contentDescription = label, tint = color, modifier = Modifier.size(28.dp))
+        Spacer(Modifier.height(4.dp))
+        Text(label, fontSize = 13.sp, color = color)
     }
+}
+
+/** "2026-08-01", "2026-08-03" → "2026년 8월 1일 ~ 8월 3일" (해가 바뀌면 종료일에도 연도 표시) */
+private fun koreanDateRange(start: String, end: String): String {
+    fun parse(s: String) = s.split("-").mapNotNull { it.toIntOrNull() }.takeIf { it.size == 3 }
+    val a = parse(start) ?: return ""
+    val b = parse(end) ?: return "${a[0]}년 ${a[1]}월 ${a[2]}일"
+    val endText = if (a[0] == b[0]) "${b[1]}월 ${b[2]}일" else "${b[0]}년 ${b[1]}월 ${b[2]}일"
+    return "${a[0]}년 ${a[1]}월 ${a[2]}일 ~ $endText"
 }
 
 /** 밸런스 게임 선택지 */
