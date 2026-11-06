@@ -78,10 +78,11 @@ import com.example.ui.viewmodel.TripRoomViewModel
 private val RoomBlue = Color(0xFF4A90E2)
 private val RoomBlueLight = Color(0xFFE3EEFC)
 private val RoomGray = Color(0xFF808080)
-private val HeaderBlue = Color(0xFF5B8DE3)
-private val RoomBackground = Color(0xFFF7F8FA)
-private val CodeBoxBlue = Color(0xFFEAF2FD)
-private val CopyButtonBlue = Color(0xFF6F9DE6)
+private val HeaderBlue = Color(0xFF4A90E2)
+private val RoomBackground = Color(0xFFFCFCFC)
+private val CodeBoxBlue = Color(0x1C4A90E2)
+private val CopyButtonBlue = Color(0xE04A90E2)
+private val NavGray = Color(0xFF727272)
 private val AvatarColors = listOf(
     Color(0xFF1E2B3E), Color(0xFFFA6B43), Color(0xFF4A90E2),
     Color(0xFF34C38F), Color(0xFF9B6BDF), Color(0xFFF5A623)
@@ -184,15 +185,15 @@ private fun TripRoomHeader(
     onEdit: () -> Unit,
     onInvite: () -> Unit
 ) {
-    val shape = RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp)
+    val shape = RoundedCornerShape(bottomStart = 30.dp, bottomEnd = 30.dp)
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .shadow(6.dp, shape)
+            .shadow(4.dp, shape)
             .clip(shape)
             .background(HeaderBlue)
             .statusBarsPadding()
-            .padding(bottom = 22.dp)
+            .padding(bottom = 30.dp)
     ) {
         Box(
             modifier = Modifier
@@ -218,8 +219,8 @@ private fun TripRoomHeader(
                     .padding(horizontal = 12.dp, vertical = 8.dp)
                     .testTag("trip_room_edit_button"),
                 color = Color.White,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Medium
             )
         }
 
@@ -227,8 +228,8 @@ private fun TripRoomHeader(
             Spacer(Modifier.height(8.dp))
             Text(
                 text = trip?.title.orEmpty(),
-                fontSize = 22.sp,
-                fontWeight = FontWeight.Bold,
+                fontSize = 24.sp,
+                fontWeight = FontWeight.SemiBold,
                 color = Color.White,
                 maxLines = 1
             )
@@ -236,7 +237,7 @@ private fun TripRoomHeader(
             Text(
                 text = trip?.let { koreanDateRange(it.startDate, it.endDate) }.orEmpty(),
                 fontSize = 14.sp,
-                color = Color.White.copy(alpha = 0.9f)
+                color = Color(0xFFFCFCFC)
             )
             Spacer(Modifier.height(18.dp))
             if (trip != null) {
@@ -253,12 +254,12 @@ private fun MemberRow(members: List<String>, myUid: String?, onInvite: () -> Uni
     Row(
         modifier = Modifier.testTag("trip_room_member_avatars"),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp)
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         members.take(maxShown).forEachIndexed { index, uid ->
             Box(
                 modifier = Modifier
-                    .size(34.dp)
+                    .size(37.dp)
                     .clip(CircleShape)
                     .background(AvatarColors[index % AvatarColors.size]),
                 contentAlignment = Alignment.Center
@@ -266,15 +267,15 @@ private fun MemberRow(members: List<String>, myUid: String?, onInvite: () -> Uni
                 Text(
                     text = if (uid == myUid) "나" else "${index + 1}",
                     color = Color.White,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Medium
                 )
             }
         }
         // 점선 원 (+) : 누르면 초대 코드 복사
         Box(
             modifier = Modifier
-                .size(34.dp)
+                .size(37.dp)
                 .clip(CircleShape)
                 .clickable(onClick = onInvite)
                 .drawBehind {
@@ -297,7 +298,7 @@ private fun MemberRow(members: List<String>, myUid: String?, onInvite: () -> Uni
             text = "현재 ${members.size}명",
             color = Color.White,
             fontSize = 14.sp,
-            fontWeight = FontWeight.Bold
+            fontWeight = FontWeight.Medium
         )
     }
 }
@@ -305,50 +306,54 @@ private fun MemberRow(members: List<String>, myUid: String?, onInvite: () -> Uni
 /** Case A: 나 혼자일 때 - 초대 코드 카드 */
 @Composable
 private fun InviteMatesCard(inviteCode: String, onCopy: () -> Unit) {
-    val cardShape = RoundedCornerShape(18.dp)
+    // 피그마 "여행룸 화면(생성 직후)" 값: 카드 모서리 15, 테두리 2 #F5F5F5, 코드 박스 높이 80 / 모서리 16 / 점선 2
+    val cardShape = RoundedCornerShape(15.dp)
     Column(
         modifier = Modifier
-            .padding(horizontal = 24.dp, vertical = 28.dp)
+            .padding(start = 23.dp, end = 24.dp, top = 27.dp)
             .fillMaxWidth()
-            .shadow(3.dp, cardShape)
+            .shadow(2.dp, cardShape)
             .clip(cardShape)
             .background(Color.White)
-            .padding(horizontal = 18.dp, vertical = 24.dp)
+            .border(2.dp, Color(0xFFF5F5F5), cardShape)
+            .padding(start = 18.dp, end = 20.dp, top = 28.dp, bottom = 46.dp)
     ) {
         Text(
             text = "트립메이트를 초대하세요!",
-            fontSize = 19.sp,
-            fontWeight = FontWeight.Bold,
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Medium,
             color = Color.Black
         )
-        Spacer(Modifier.height(6.dp))
+        Spacer(Modifier.height(7.dp))
         Text(
             text = "코드를 전송하여 함께 여행을 계획하세요",
-            fontSize = 13.sp,
-            color = RoomGray
+            fontSize = 14.sp,
+            color = NavGray
         )
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(24.dp))
 
         // 점선 테두리 초대 코드 박스 + [복사]
         Row(
             modifier = Modifier
+                .padding(start = 1.dp)
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(14.dp))
+                .height(80.dp)
+                .clip(RoundedCornerShape(16.dp))
                 .background(CodeBoxBlue)
                 .drawBehind {
-                    val stroke = 1.5.dp.toPx()
+                    val stroke = 2.dp.toPx()
                     drawRoundRect(
                         color = RoomBlue,
                         topLeft = Offset(stroke / 2, stroke / 2),
                         size = Size(size.width - stroke, size.height - stroke),
-                        cornerRadius = CornerRadius(14.dp.toPx() - stroke / 2),
+                        cornerRadius = CornerRadius(16.dp.toPx() - stroke / 2),
                         style = Stroke(
                             width = stroke,
-                            pathEffect = PathEffect.dashPathEffect(floatArrayOf(5.dp.toPx(), 4.dp.toPx()))
+                            pathEffect = PathEffect.dashPathEffect(floatArrayOf(6.dp.toPx(), 4.dp.toPx()))
                         )
                     )
                 }
-                .padding(start = 24.dp, end = 14.dp, top = 20.dp, bottom = 20.dp),
+                .padding(start = 29.dp, end = 16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
@@ -356,24 +361,30 @@ private fun InviteMatesCard(inviteCode: String, onCopy: () -> Unit) {
                 modifier = Modifier
                     .weight(1f)
                     .testTag("trip_room_invite_code"),
-                fontSize = 30.sp,
-                fontWeight = FontWeight.ExtraBold,
-                letterSpacing = 5.sp,
-                color = Color.Black,
-                maxLines = 1
-            )
-            Text(
-                text = "복사",
-                modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(CopyButtonBlue)
-                    .clickable(onClick = onCopy)
-                    .padding(horizontal = 12.dp, vertical = 7.dp)
-                    .testTag("trip_room_copy_button"),
-                fontSize = 15.sp,
+                fontSize = 32.sp,
                 fontWeight = FontWeight.Bold,
-                color = Color.Black
+                letterSpacing = 6.4.sp,
+                color = Color.Black,
+                maxLines = 1,
+                softWrap = false
             )
+            Box(
+                modifier = Modifier
+                    .size(width = 56.dp, height = 38.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(CopyButtonBlue)
+                    .border(1.dp, Color(0xFFD9D9D9), RoundedCornerShape(10.dp))
+                    .clickable(onClick = onCopy)
+                    .testTag("trip_room_copy_button"),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "복사",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = Color.Black
+                )
+            }
         }
     }
 }
@@ -382,12 +393,12 @@ private fun InviteMatesCard(inviteCode: String, onCopy: () -> Unit) {
 @Composable
 private fun TripRoomBottomBar(onNotReady: (String) -> Unit) {
     Column(modifier = Modifier.background(Color.White)) {
-        HorizontalDivider(color = Color(0xFFE6E8EC))
+        HorizontalDivider(color = Color(0xFFE3E3E3))
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .navigationBarsPadding()
-                .height(72.dp),
+                .height(96.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             BottomTab(Icons.Outlined.Home, "여행홈", selected = true, tag = "tab_home") {}
@@ -405,7 +416,7 @@ private fun RowScope.BottomTab(
     tag: String,
     onClick: () -> Unit
 ) {
-    val color = if (selected) RoomBlue else Color(0xFF6B6F76)
+    val color = if (selected) RoomBlue else NavGray
     Column(
         modifier = Modifier
             .weight(1f)
@@ -415,9 +426,9 @@ private fun RowScope.BottomTab(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Icon(icon, contentDescription = label, tint = color, modifier = Modifier.size(28.dp))
-        Spacer(Modifier.height(4.dp))
-        Text(label, fontSize = 13.sp, color = color)
+        Icon(icon, contentDescription = label, tint = color, modifier = Modifier.size(33.dp))
+        Spacer(Modifier.height(6.dp))
+        Text(label, fontSize = 14.sp, fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal, color = color)
     }
 }
 
