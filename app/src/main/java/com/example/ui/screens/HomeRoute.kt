@@ -1,5 +1,12 @@
 package com.example.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -13,15 +20,19 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -38,7 +49,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -46,9 +60,13 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.data.Trip
-import com.example.data.model.TripHelper
+import com.example.ui.components.GenericTravelThumbnail
+import com.example.R
 import com.example.ui.components.TripMateLogo
 import com.example.ui.viewmodel.HomeViewModel
+import com.google.firebase.auth.FirebaseAuth
+import java.util.Calendar
+import java.util.TimeZone
 
 private val HomeBlue = Color(0xFF4A90E2)
 
@@ -130,7 +148,31 @@ fun HomeRoute(
     }
 }
 
-/** 여행이 있을 때: 내 여행 목록 + 하단 버튼 2개 */
+// ---------- 여행이 있을 때: 내 여행 / 지난 여행 목록 (피그마 "홈화면(여행 있을 시)") ----------
+
+private val ScreenBg = Color(0xFFFCFCFC)
+private val CardBlue = Color(0xFF197CF0)
+private val CardShadowBlue = Color(0xAD4A90E2)
+private val BadgeOrange = Color(0xFFFF914D)
+private val BadgeBlueBg = Color(0x2E4A90E2)
+private val BadgeBlueText = Color(0xFF004EA8)
+private val CardBorder = Color(0xFFD9D9D9)
+private val SubGray = Color(0xFF727272)
+private val PastPill = Color(0xFFE5E5E5)
+private val PastPillText = Color(0xFF404040)
+private val OutlineText = Color(0xFF197CF0)
+private val MemberColors = listOf(
+    Color(0xFF2B2550), Color(0xFFFF914D), Color(0xFF4A90E2),
+    Color(0xFF34C38F), Color(0xFF9B6BDF), Color(0xFFF5A623)
+)
+private const val PAST_PREVIEW_COUNT = 2
+
+/**
+ * 여행이 있을 때 홈 화면.
+ * - 내 여행: 아직 끝나지 않은 여행 (가장 가까운 여행은 파란 카드로 강조)
+ * - 지난 여행: 종료일이 지난 여행 (기본 2개, "여행 전체보기"로 모두 보기)
+ * - 하단: [여행 생성] [초대코드로 참여]
+ */
 @Composable
 private fun TripListScreen(
     trips: List<Trip>,
@@ -138,17 +180,27 @@ private fun TripListScreen(
     onCreateClick: () -> Unit,
     onJoinClick: () -> Unit
 ) {
+    val today = remember { todayDayNumber() }
+    val myUid = remember { runCatching { FirebaseAuth.getInstance().currentUser?.uid }.getOrNull() }
+    val upcoming = trips
+        .filter { (dayNumber(it.endDate) ?: Long.MAX_VALUE) >= today }
+        .sortedBy { it.startDate }
+    val past = trips
+        .filter { (dayNumber(it.endDate) ?: Long.MAX_VALUE) < today }
+        .sortedByDescending { it.endDate }
+    var showAllPast by rememberSaveable { mutableStateOf(false) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.White)
+            .background(ScreenBg)
             .statusBarsPadding()
             .navigationBarsPadding()
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 24.dp, vertical = 14.dp),
+                .padding(start = 24.dp, end = 30.dp, top = 18.dp, bottom = 10.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -165,98 +217,293 @@ private fun TripListScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f),
-            contentPadding = PaddingValues(horizontal = 24.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 12.dp, bottom = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            item {
-                Text(
-                    text = "내 여행",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.Black,
-                    modifier = Modifier.padding(bottom = 4.dp)
+            item { SectionTitle("내 여행") }
+            if (upcoming.isEmpty()) {
+                item {
+                    Text(
+                        text = "예정된 여행이 없어요. 새 여행을 만들어 보세요!",
+                        modifier = Modifier.padding(horizontal = 11.dp),
+                        fontSize = 14.sp,
+                        color = SubGray
+                    )
+                }
+            }
+            itemsIndexed(upcoming, key = { _, trip -> trip.tripId }) { index, trip ->
+                UpcomingTripCard(
+                    trip = trip,
+                    dDay = (dayNumber(trip.startDate) ?: today) - today,
+                    highlighted = index == 0,
+                    myUid = myUid,
+                    onClick = { onTripClick(trip) }
                 )
             }
-            items(trips, key = { it.tripId }) { trip ->
-                TripCard(trip = trip, onClick = { onTripClick(trip) })
+
+            if (past.isNotEmpty()) {
+                item { SectionTitle("지난 여행", topPadding = 10.dp) }
+                items(past.take(PAST_PREVIEW_COUNT), key = { it.tripId }) { trip ->
+                    PastTripCard(trip = trip, onClick = { onTripClick(trip) })
+                }
+                if (past.size > PAST_PREVIEW_COUNT) {
+                    item(key = "past_more") {
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                        // "여행 전체보기"를 누르면 나머지 지난 여행이 위에서 아래로 촤르륵 펼쳐짐
+                        AnimatedVisibility(
+                            visible = showAllPast,
+                            enter = expandVertically(animationSpec = tween(450), expandFrom = Alignment.Top) +
+                                fadeIn(animationSpec = tween(450)),
+                            exit = shrinkVertically(animationSpec = tween(350), shrinkTowards = Alignment.Top) +
+                                fadeOut(animationSpec = tween(250))
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(bottom = 20.dp),
+                                verticalArrangement = Arrangement.spacedBy(20.dp)
+                            ) {
+                                past.drop(PAST_PREVIEW_COUNT).forEach { trip ->
+                                    PastTripCard(trip = trip, onClick = { onTripClick(trip) })
+                                }
+                            }
+                        }
+                        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                            Text(
+                                text = if (showAllPast) "접기  ∧" else "여행 전체보기  >",
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable { showAllPast = !showAllPast }
+                                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                                    .testTag("home_show_all_past"),
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = SubGray
+                            )
+                        }
+                        }
+                    }
+                }
             }
         }
 
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 24.dp, vertical = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                .padding(start = 24.dp, end = 25.dp, top = 12.dp, bottom = 20.dp),
+            horizontalArrangement = Arrangement.spacedBy(15.dp)
         ) {
             Button(
                 onClick = onCreateClick,
                 modifier = Modifier
                     .weight(1f)
-                    .height(54.dp)
+                    .height(53.dp)
                     .testTag("home_create_trip_button"),
                 shape = RoundedCornerShape(10.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = HomeBlue, contentColor = Color.White)
             ) {
-                Text("여행 생성", fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                Text("여행 생성", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
             }
             Box(
                 modifier = Modifier
                     .weight(1f)
-                    .height(54.dp)
-                    .background(Color.White, RoundedCornerShape(10.dp))
-                    .border(1.dp, HomeBlue, RoundedCornerShape(10.dp))
+                    .height(53.dp)
                     .clip(RoundedCornerShape(10.dp))
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        onClick = onJoinClick
-                    )
+                    .background(Color.White)
+                    .border(1.dp, HomeBlue, RoundedCornerShape(10.dp))
+                    .clickable(onClick = onJoinClick)
                     .testTag("home_join_trip_button"),
                 contentAlignment = Alignment.Center
             ) {
-                Text("초대코드 참여", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = HomeBlue)
+                Text("초대코드로 참여", fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = OutlineText)
             }
         }
     }
 }
 
 @Composable
-private fun TripCard(trip: Trip, onClick: () -> Unit) {
-    val dDay = TripHelper.calculateDDay(trip.startDate)
-    val dDayText = when {
-        dDay == 0 -> "D-Day"
-        dDay < 0 -> "D$dDay"
-        else -> "D+$dDay"
+private fun SectionTitle(text: String, topPadding: androidx.compose.ui.unit.Dp = 0.dp) {
+    Text(
+        text = text,
+        modifier = Modifier.padding(start = 11.dp, top = topPadding),
+        fontSize = 22.sp,
+        fontWeight = FontWeight.Medium,
+        color = Color.Black
+    )
+}
+
+/** 다가오는 여행 카드. 가장 가까운 여행(highlighted)은 파란 배경 + 주황 D-day + 멤버 표시 */
+@Composable
+private fun UpcomingTripCard(
+    trip: Trip,
+    dDay: Long,
+    highlighted: Boolean,
+    myUid: String?,
+    onClick: () -> Unit
+) {
+    val shape = RoundedCornerShape(20.dp)
+    var card = Modifier
+        .fillMaxWidth()
+        .heightIn(min = if (highlighted) 150.dp else 113.dp)
+    card = if (highlighted) {
+        card.shadow(4.dp, shape, ambientColor = CardShadowBlue, spotColor = CardShadowBlue)
+            .clip(shape)
+            .background(CardBlue)
+    } else {
+        card.shadow(2.dp, shape)
+            .clip(shape)
+            .background(Color.White)
+            .border(1.dp, CardBorder, shape)
     }
-    Column(
+    Row(
+        modifier = card
+            .clickable(onClick = onClick)
+            .padding(start = 19.dp, end = 20.dp, top = 12.dp, bottom = 14.dp)
+            .testTag("trip_card_${trip.tripId}"),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Box(
+                modifier = Modifier
+                    .height(30.dp)
+                    .clip(RoundedCornerShape(25.dp))
+                    .background(if (highlighted) BadgeOrange else BadgeBlueBg)
+                    .padding(horizontal = 12.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = dDayText(dDay),
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = if (highlighted) Color.White else BadgeBlueText
+                )
+            }
+            Column(modifier = Modifier.padding(start = 8.dp)) {
+                Spacer(Modifier.height(if (highlighted) 6.dp else 10.dp))
+                Text(
+                    text = trip.title,
+                    fontSize = if (highlighted) 24.sp else 18.sp,
+                    fontWeight = if (highlighted) FontWeight.Bold else FontWeight.Medium,
+                    color = if (highlighted) Color.White else Color.Black,
+                    maxLines = 1
+                )
+                Spacer(Modifier.height(if (highlighted) 2.dp else 4.dp))
+                Text(
+                    text = koreanDateRange(trip.startDate, trip.endDate),
+                    fontSize = if (highlighted) 15.sp else 14.sp,
+                    fontWeight = if (highlighted) FontWeight.SemiBold else FontWeight.Normal,
+                    color = if (highlighted) Color.White else SubGray
+                )
+                if (highlighted) {
+                    Spacer(Modifier.height(8.dp))
+                    MemberCircles(members = trip.members, myUid = myUid)
+                }
+            }
+        }
+        Spacer(Modifier.width(12.dp))
+        DestinationCircle(destination = trip.destination, size = if (highlighted) 100.dp else 80.dp)
+    }
+}
+
+/** 멤버 동그라미 (37dp, 살짝 겹쳐서 최대 4개) */
+@Composable
+private fun MemberCircles(members: List<String>, myUid: String?) {
+    Row {
+        members.take(4).forEachIndexed { index, uid ->
+            Box(
+                modifier = Modifier
+                    .offset(x = (-3 * index).dp)
+                    .size(37.dp)
+                    .clip(CircleShape)
+                    .background(MemberColors[index % MemberColors.size]),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = if (uid == myUid) "나" else "${index + 1}",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = Color.White
+                )
+            }
+        }
+    }
+}
+
+/** 여행지 동그라미 사진: 부산/제주는 피그마 사진, 나머지는 기존 TripVisuals 그림 */
+@Composable
+private fun DestinationCircle(destination: String, size: androidx.compose.ui.unit.Dp) {
+    val photo = when (destination) {
+        "부산" -> R.drawable.trip_thumb_busan
+        "제주" -> R.drawable.trip_thumb_jeju
+        else -> null
+    }
+    if (photo != null) {
+        Image(
+            painter = painterResource(photo),
+            contentDescription = destination,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .size(size)
+                .clip(CircleShape)
+        )
+    } else {
+        GenericTravelThumbnail(modifier = Modifier.size(size))
+    }
+}
+
+/** 지난 여행 카드: 제목 / 날짜 / [완료] */
+@Composable
+private fun PastTripCard(trip: Trip, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(20.dp)
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .border(1.dp, Color(0xFFE0E3E8), RoundedCornerShape(16.dp))
+            .height(77.dp)
+            .shadow(2.dp, shape)
+            .clip(shape)
+            .background(Color.White)
+            .border(1.dp, CardBorder, shape)
             .clickable(onClick = onClick)
-            .padding(18.dp)
-            .testTag("trip_card_${trip.tripId}")
+            .padding(start = 27.dp, end = 23.dp)
+            .testTag("past_trip_card_${trip.tripId}"),
+        verticalAlignment = Alignment.CenterVertically
     ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(trip.title, fontSize = 17.sp, fontWeight = FontWeight.Medium, color = Color.Black, maxLines = 1)
+            Spacer(Modifier.height(4.dp))
+            Text(koreanDateRange(trip.startDate, trip.endDate), fontSize = 14.sp, color = SubGray)
+        }
         Box(
             modifier = Modifier
-                .clip(RoundedCornerShape(10.dp))
-                .background(Color(0xFFE3EEFC))
-                .padding(horizontal = 10.dp, vertical = 3.dp)
+                .height(30.dp)
+                .clip(RoundedCornerShape(25.dp))
+                .background(PastPill)
+                .padding(horizontal = 12.dp),
+            contentAlignment = Alignment.Center
         ) {
-            Text(dDayText, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = HomeBlue)
-        }
-        Spacer(Modifier.height(8.dp))
-        Text(trip.title, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.Black)
-        Spacer(Modifier.height(4.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(trip.dateRangeText, fontSize = 13.sp, color = Color(0xFF808080), modifier = Modifier.weight(1f))
-            Icon(
-                Icons.Outlined.Person,
-                contentDescription = null,
-                tint = Color(0xFF808080),
-                modifier = Modifier.size(16.dp)
-            )
-            Text("${trip.memberCount}", fontSize = 13.sp, color = Color(0xFF808080))
+            Text("완료", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = PastPillText)
         }
     }
+}
+
+private fun dDayText(dDay: Long): String = when {
+    dDay > 0 -> "D-$dDay"
+    dDay == 0L -> "D-Day"
+    else -> "여행 중"
+}
+
+/** "2026-08-01" → 날짜 번호(일 단위). 날짜 비교/디데이 계산용 */
+private fun dayNumber(date: String): Long? {
+    val p = date.split("-").mapNotNull { it.toIntOrNull() }
+    if (p.size != 3) return null
+    val cal = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply {
+        clear()
+        set(p[0], p[1] - 1, p[2])
+    }
+    return cal.timeInMillis / (24L * 60 * 60 * 1000)
+}
+
+private fun todayDayNumber(): Long {
+    val local = Calendar.getInstance()
+    return dayNumber(
+        "%d-%d-%d".format(local.get(Calendar.YEAR), local.get(Calendar.MONTH) + 1, local.get(Calendar.DAY_OF_MONTH))
+    )!!
 }
