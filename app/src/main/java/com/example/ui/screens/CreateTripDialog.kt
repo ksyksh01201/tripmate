@@ -37,12 +37,8 @@ import androidx.compose.material3.SelectableDates
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberDateRangePickerState
-import android.content.res.Configuration
+import androidx.compose.material3.DateRangePickerState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -315,42 +311,38 @@ private fun TripDateRangePickerDialog(
     onConfirm: (start: Long, end: Long) -> Unit
 ) {
     val todayUtcMillis = remember { todayAsUtcMillis() }
-    val state = rememberDateRangePickerState(
-        initialSelectedStartDateMillis = initialStart,
-        initialSelectedEndDateMillis = initialEnd,
-        selectableDates = object : SelectableDates {
-            override fun isSelectableDate(utcTimeMillis: Long): Boolean = utcTimeMillis >= todayUtcMillis
-        }
-    )
+    // 기기 언어와 상관없이 달력을 한국어로 표시 (요일: 일 월 화..., 월: 2026년 11월)
+    // 달력 안의 요일/월 글자는 이 state의 locale을 따르기 때문에 여기서 한국어를 지정합니다.
+    val state = remember {
+        DateRangePickerState(
+            locale = Locale.KOREA,
+            initialSelectedStartDateMillis = initialStart,
+            initialSelectedEndDateMillis = initialEnd,
+            selectableDates = object : SelectableDates {
+                override fun isSelectableDate(utcTimeMillis: Long): Boolean = utcTimeMillis >= todayUtcMillis
+            }
+        )
+    }
     val start = state.selectedStartDateMillis
+    val end = state.selectedEndDateMillis
+    val hasSelection = start != null
 
-    // 기기 언어와 상관없이 달력을 한국어로 표시 (요일, 월 이름, "시작일 - 종료일" 등)
-    val baseContext = LocalContext.current
-    val baseConfig = LocalConfiguration.current
-    val koreanConfig = remember(baseConfig) {
-        Configuration(baseConfig).apply { setLocale(Locale.KOREA) }
-    }
-    val koreanContext = remember(baseContext, koreanConfig) {
-        baseContext.createConfigurationContext(koreanConfig)
-    }
-
-    CompositionLocalProvider(
-        LocalConfiguration provides koreanConfig,
-        LocalContext provides koreanContext
-    ) {
     DatePickerDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
+            // 날짜를 하나도 고르지 않았으면 확인 버튼은 비활성화
             TextButton(
-                enabled = start != null,
+                enabled = hasSelection,
                 // 종료일을 안 고르면 당일치기로 봅니다.
-                onClick = { start?.let { onConfirm(it, state.selectedEndDateMillis ?: it) } }
-            ) { Text("확인", color = if (start != null) Blue else Placeholder) }
+                onClick = { start?.let { onConfirm(it, end ?: it) } }
+            ) { Text("확인", color = if (hasSelection) Blue else Placeholder) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("취소", color = Placeholder) }
+            TextButton(onClick = onDismiss) { Text("취소", color = Blue) }
         }
     ) {
+        // 달력은 위아래로 스크롤하면 다음 달/이전 달로 넘어갑니다.
+        // 요일 줄과 "2026년 11월" 같은 월 제목은 글자일 뿐이라 눌러도 아무 동작이 없습니다.
         DateRangePicker(
             state = state,
             modifier = Modifier.weight(1f),
@@ -361,9 +353,15 @@ private fun TripDateRangePickerDialog(
                     fontWeight = FontWeight.Bold
                 )
             },
+            headline = {
+                Text(
+                    text = "${start?.toDisplayDate() ?: "시작일"} - ${end?.toDisplayDate() ?: "종료일"}",
+                    modifier = Modifier.padding(start = 24.dp, end = 12.dp, bottom = 12.dp),
+                    fontSize = 22.sp
+                )
+            },
             showModeToggle = false
         )
-    }
     }
 }
 
