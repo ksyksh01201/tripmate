@@ -96,6 +96,7 @@ fun ScheduleContent(trip: Trip) {
     var selectedIndex by rememberSaveable { mutableIntStateOf(0) }
     val selectedDay = days.getOrNull(selectedIndex) ?: days.firstOrNull()
     var showAdd by rememberSaveable { mutableStateOf(false) }
+    var showMap by rememberSaveable { mutableStateOf(false) }
 
     // 저장이 끝나면 팝업 닫기
     LaunchedEffect(editState.savedCount) { if (editState.savedCount > 0) showAdd = false }
@@ -131,10 +132,7 @@ fun ScheduleContent(trip: Trip) {
             Row(
                 modifier = Modifier
                     .clip(RoundedCornerShape(6.dp))
-                    .clickable {
-                        // TODO 카카오맵 키를 받으면 지도 화면으로 연결
-                        Toast.makeText(context, "지도 보기는 카카오맵 연결 후 사용할 수 있어요", Toast.LENGTH_SHORT).show()
-                    }
+                    .clickable { showMap = true }
                     .padding(horizontal = 4.dp, vertical = 2.dp)
                     .testTag("schedule_open_map"),
                 verticalAlignment = Alignment.CenterVertically,
@@ -217,7 +215,30 @@ fun ScheduleContent(trip: Trip) {
             onDismiss = { showAdd = false },
             onSave = { title, memo ->
                 viewModel.addSchedule(Schedule(day = selectedDay.index, title = title, memo = memo))
-            }
+            },
+            onOpenMap = { showAdd = false; showMap = true }
+        )
+    }
+
+    if (showMap) {
+        MapPickerDialog(
+            day = selectedDay,
+            destination = trip.destination,
+            daySchedules = daySchedules,
+            isSaving = editState.isSaving,
+            onAddPlace = { place ->
+                viewModel.addSchedule(
+                    Schedule(
+                        day = selectedDay.index,
+                        title = place.name,
+                        address = place.address,
+                        lat = place.lat,
+                        lng = place.lng,
+                        placeId = place.id
+                    )
+                )
+            },
+            onDismiss = { showMap = false }
         )
     }
 }
@@ -353,7 +374,8 @@ private fun AddScheduleDialog(
     isSaving: Boolean,
     errorMessage: String?,
     onDismiss: () -> Unit,
-    onSave: (title: String, memo: String) -> Unit
+    onSave: (title: String, memo: String) -> Unit,
+    onOpenMap: () -> Unit
 ) {
     var title by rememberSaveable { mutableStateOf("") }
     var memo by rememberSaveable { mutableStateOf("") }
@@ -384,7 +406,27 @@ private fun AddScheduleDialog(
                     modifier = Modifier.fillMaxWidth(),
                     textAlign = TextAlign.Center
                 )
-                Spacer(Modifier.height(20.dp))
+                Spacer(Modifier.height(16.dp))
+
+                // 카카오맵에서 장소 검색해서 추가
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .border(1.dp, ScheduleBlue, RoundedCornerShape(10.dp))
+                        .clickable(enabled = !isSaving, onClick = onOpenMap)
+                        .testTag("schedule_add_from_map"),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Outlined.Map, contentDescription = null, tint = ScheduleBlue, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("지도에서 장소 검색하기", color = ScheduleBlue, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                }
+                Spacer(Modifier.height(16.dp))
+                Text("또는 직접 입력", fontSize = 12.sp, color = ScheduleGray)
+                Spacer(Modifier.height(12.dp))
 
                 FieldLabel("장소 또는 할 일")
                 OutlinedTextField(
