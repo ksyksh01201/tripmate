@@ -44,6 +44,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -116,6 +117,22 @@ fun TripRoomScreen(
         Toast.makeText(context, "초대 코드가 복사되었어요", Toast.LENGTH_SHORT).show()
     }
 
+    // 오른쪽 위 [편집] → 여행방 편집 화면
+    var editing by rememberSaveable { mutableStateOf(false) }
+    // 삭제 직후 문서가 사라져도 편집 화면이 끝까지 처리할 수 있게 마지막 여행 정보를 기억
+    var lastLoaded by remember { mutableStateOf<TripRoomUiState.Loaded?>(null) }
+    if (loaded != null) lastLoaded = loaded
+    val editTarget = loaded ?: lastLoaded
+    if (editing && editTarget != null) {
+        TripEditScreen(
+            trip = editTarget.trip,
+            myUid = editTarget.myUid,
+            onBack = { editing = false },
+            onExitTrip = onBack
+        )
+        return
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -125,7 +142,7 @@ fun TripRoomScreen(
             trip = loaded?.trip,
             myUid = loaded?.myUid,
             onBack = onBack,
-            onEdit = { Toast.makeText(context, "편집 기능은 준비 중이에요", Toast.LENGTH_SHORT).show() },
+            onEdit = { if (loaded != null) editing = true },
             onInvite = { loaded?.trip?.inviteCode?.let(copyInviteCode) },
             showMembers = currentTab == RoomTab.Home
         )
