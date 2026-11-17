@@ -1,7 +1,6 @@
 package com.example.data
 
 import com.google.android.gms.tasks.Task
-import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -13,15 +12,9 @@ import kotlin.coroutines.resumeWithException
 /**
  * 여행 문서의 memberNames 맵(uid → 이름)을 다룹니다.
  * 각자 여행방에 들어오면 자기 이름을 저장해서, 다른 사람 화면에도 이름이 보이게 합니다.
- *
- * 테스트 멤버(uid가 "test_"로 시작)는 디버그 빌드에서 에뮬레이터 하나로 2명 이상 화면을 보기 위한 가짜 멤버예요.
  */
 object TripMemberNames {
-    const val TEST_PREFIX = "test_"
-
     private val trips get() = FirebaseFirestore.getInstance().collection("trips")
-
-    fun isTestMember(uid: String) = uid.startsWith(TEST_PREFIX)
 
     /** 여행의 memberNames를 실시간으로 받습니다. */
     fun observe(tripId: String): Flow<Map<String, String>> = callbackFlow {
@@ -37,27 +30,6 @@ object TripMemberNames {
     suspend fun saveMyName(tripId: String, uid: String, name: String) {
         if (name.isBlank()) return
         trips.document(tripId).update("memberNames.$uid", name).awaitTask()
-    }
-
-    /** 가짜 테스트 멤버를 한 명 추가합니다. */
-    suspend fun addTestMember(trip: Trip) {
-        val number = trip.members.count { isTestMember(it) } + 1
-        val uid = TEST_PREFIX + System.currentTimeMillis().toString(36)
-        trips.document(trip.tripId).update(
-            mapOf(
-                "members" to FieldValue.arrayUnion(uid),
-                "memberNames.$uid" to "테스트멤버$number"
-            )
-        ).awaitTask()
-    }
-
-    /** 테스트 멤버를 모두 지웁니다. */
-    suspend fun removeTestMembers(trip: Trip) {
-        val testIds = trip.members.filter { isTestMember(it) }
-        if (testIds.isEmpty()) return
-        val updates = mutableMapOf<String, Any>("members" to FieldValue.arrayRemove(*testIds.toTypedArray()))
-        testIds.forEach { updates["memberNames.$it"] = FieldValue.delete() }
-        trips.document(trip.tripId).update(updates).awaitTask()
     }
 }
 
