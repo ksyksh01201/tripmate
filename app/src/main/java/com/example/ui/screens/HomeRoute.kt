@@ -81,8 +81,14 @@ private enum class HomeDialog { None, Create, Join }
 @Composable
 fun HomeRoute(
     onOpenTrip: (tripId: String) -> Unit,
+    onOpenAccount: () -> Unit = {},
     viewModel: HomeViewModel = viewModel()
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    // 톱니바퀴 메뉴의 [탈퇴]: 아직 화면이 없어서 안내만
+    val onWithdraw = {
+        android.widget.Toast.makeText(context, "탈퇴 기능은 준비 중이에요", android.widget.Toast.LENGTH_SHORT).show()
+    }
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val trips by viewModel.myTrips.collectAsStateWithLifecycle()
     var dialog by rememberSaveable { mutableStateOf(HomeDialog.None) }
@@ -115,14 +121,18 @@ fun HomeRoute(
 
         currentTrips.isEmpty() -> HomeScreen(
             onCreateTripClick = openCreate,
-            onJoinTripClick = openJoin
+            onJoinTripClick = openJoin,
+            onLogoutClick = onOpenAccount,
+            onWithdrawClick = onWithdraw
         )
 
         else -> TripListScreen(
             trips = currentTrips,
             onTripClick = { onOpenTrip(it.tripId) },
             onCreateClick = openCreate,
-            onJoinClick = openJoin
+            onJoinClick = openJoin,
+            onLogoutClick = onOpenAccount,
+            onWithdrawClick = onWithdraw
         )
     }
 
@@ -178,7 +188,9 @@ private fun TripListScreen(
     trips: List<Trip>,
     onTripClick: (Trip) -> Unit,
     onCreateClick: () -> Unit,
-    onJoinClick: () -> Unit
+    onJoinClick: () -> Unit,
+    onLogoutClick: () -> Unit = {},
+    onWithdrawClick: () -> Unit = {}
 ) {
     val today = remember { todayDayNumber() }
     val myUid = remember { runCatching { FirebaseAuth.getInstance().currentUser?.uid }.getOrNull() }
@@ -205,11 +217,10 @@ private fun TripListScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             TripMateLogo(color = HomeBlue, fontSize = 32.sp)
-            Icon(
-                imageVector = Icons.Outlined.Settings,
-                contentDescription = "설정",
-                tint = Color(0xFFB0B0B0),
-                modifier = Modifier.size(26.dp)
+            // 톱니바퀴 → [로그아웃] [탈퇴]
+            com.example.ui.components.SettingsMenuButton(
+                onLogoutClick = onLogoutClick,
+                onWithdrawClick = onWithdrawClick
             )
         }
 
