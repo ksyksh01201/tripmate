@@ -1,6 +1,7 @@
 package com.example.data
 
 import com.google.android.gms.tasks.Task
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -30,6 +31,15 @@ object TripMemberNames {
     suspend fun saveMyName(tripId: String, uid: String, name: String) {
         if (name.isBlank()) return
         trips.document(tripId).update("memberNames.$uid", name).awaitTask()
+    }
+
+    /** 예전에 넣었던 가짜 테스트 멤버(uid가 "test_"로 시작)를 여행에서 지웁니다. */
+    suspend fun removeTestMembers(tripId: String, members: List<String>) {
+        val testIds = members.filter { it.startsWith("test_") }
+        if (testIds.isEmpty()) return
+        val updates = mutableMapOf<String, Any>("members" to FieldValue.arrayRemove(*testIds.toTypedArray()))
+        testIds.forEach { updates["memberNames.$it"] = FieldValue.delete() }
+        trips.document(tripId).update(updates).awaitTask()
     }
 }
 

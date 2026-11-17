@@ -78,6 +78,13 @@ fun TripMembersPanel(
             runCatching { TripMemberNames.saveMyName(id, myUid, AccountStore.name(context)) }
         }
     }
+    // 테스트 때 넣었던 가짜 멤버가 남아 있으면 자동으로 지움
+    LaunchedEffect(trip?.tripId, members) {
+        val id = trip?.tripId
+        if (!id.isNullOrBlank() && myUid != null && myUid in members) {
+            runCatching { TripMemberNames.removeTestMembers(id, members) }
+        }
+    }
     // 나를 맨 앞에 보여 줌
     val ordered = remember(members, myUid) {
         members.withIndex().sortedBy { if (it.value == myUid) 0 else 1 }
