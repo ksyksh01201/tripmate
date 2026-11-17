@@ -404,8 +404,8 @@ private fun UpcomingTripCard(
                     color = if (highlighted) Color.White else SubGray
                 )
                 if (highlighted) {
-                    Spacer(Modifier.height(8.dp))
-                    MemberCircles(members = trip.members, myUid = myUid)
+                    Spacer(Modifier.height(10.dp))
+                    com.example.ui.components.TripMemberCountPill(count = trip.members.size)
                 }
             }
         }

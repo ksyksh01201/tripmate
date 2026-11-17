@@ -265,7 +265,7 @@ private fun TripRoomHeader(
             )
             Spacer(Modifier.height(18.dp))
             if (trip != null && showMembers) {
-                MemberRow(members = trip.members, myUid = myUid, onInvite = onInvite)
+                com.example.ui.components.TripMembersPanel(members = trip.members, myUid = myUid)
             }
         }
     }
