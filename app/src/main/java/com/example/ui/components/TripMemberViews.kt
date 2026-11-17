@@ -35,17 +35,31 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.widget.Toast
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import com.example.BuildConfig
 import com.example.data.AccountStore
+import com.example.data.Trip
+import com.example.data.TripMemberNames
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.launch
 
 private val PanelBlue = Color(0xFF3A78D6)
 private val AvatarIconBlue = Color(0xFF3A78D6)
 
 /** 멤버 표시 이름: 나는 "홍길동(나)", 다른 사람은 아직 이름 정보가 없어서 "멤버2" … */
 @Composable
-private fun memberLabel(uid: String, index: Int, myUid: String?): String {
+private fun memberLabel(uid: String, index: Int, myUid: String?, names: Map<String, String>): String {
     val context = LocalContext.current
     val myName = remember { AccountStore.name(context) }
-    return if (uid == myUid) "${myName.ifBlank { "나" }}(나)" else "멤버${index + 1}"
+    return if (uid == myUid) "${myName.ifBlank { "나" }}(나)"
+    else names[uid]?.takeIf { it.isNotBlank() } ?: "멤버${index + 1}"
 }
 
 /**
@@ -53,13 +67,31 @@ private fun memberLabel(uid: String, index: Int, myUid: String?): String {
  * [👥 참여자 N명 | (사람) 홍길동(나)  (사람) 멤버2 …]  — 인원이 많으면 옆으로 넘겨 볼 수 있어요.
  */
 @Composable
-fun TripMembersPanel(members: List<String>, myUid: String?, modifier: Modifier = Modifier) {
+fun TripMembersPanel(
+    members: List<String>,
+    myUid: String?,
+    modifier: Modifier = Modifier,
+    trip: Trip? = null
+) {
+    val context = LocalContext.current
+    // 여행 문서에 저장된 이름들 (팀원이 자기 폰에서 들어오면 그 사람 이름이 보여요)
+    val names by remember(trip?.tripId) {
+        trip?.tripId?.takeIf { it.isNotBlank() }?.let { TripMemberNames.observe(it) } ?: flowOf(emptyMap())
+    }.collectAsState(initial = emptyMap())
+    // 내 이름을 여행 문서에 저장해서 다른 멤버 화면에도 보이게 함
+    LaunchedEffect(trip?.tripId, myUid) {
+        val id = trip?.tripId
+        if (!id.isNullOrBlank() && myUid != null && myUid in members) {
+            runCatching { TripMemberNames.saveMyName(id, myUid, AccountStore.name(context)) }
+        }
+    }
     // 나를 맨 앞에 보여 줌
     val ordered = remember(members, myUid) {
         members.withIndex().sortedBy { if (it.value == myUid) 0 else 1 }
     }
+    Column(modifier) {
     Row(
-        modifier = modifier
+        modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
             .background(PanelBlue)
@@ -100,7 +132,7 @@ fun TripMembersPanel(members: List<String>, myUid: String?, modifier: Modifier =
                     }
                     Spacer(Modifier.height(3.dp))
                     Text(
-                        memberLabel(uid, index, myUid),
+                        memberLabel(uid, index, myUid, names),
                         color = Color.White,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Medium,
@@ -111,6 +143,42 @@ fun TripMembersPanel(members: List<String>, myUid: String?, modifier: Modifier =
                     )
                 }
             }
+        }
+    }
+    if (BuildConfig.DEBUG && trip != null) {
+        TestMemberTools(trip)
+    }
+    }
+}
+
+/** 디버그 빌드에서만 보이는 테스트 도구: 에뮬레이터 하나로 2명 이상 화면을 확인할 수 있어요. */
+@Composable
+private fun TestMemberTools(trip: Trip) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var working by remember { mutableStateOf(false) }
+    val hasTest = trip.members.any { TripMemberNames.isTestMember(it) }
+    fun launch(block: suspend () -> Unit) {
+        if (working) return
+        working = true
+        scope.launch {
+            runCatching { block() }.onFailure {
+                Toast.makeText(context, "테스트 멤버 변경 실패: ${it.message}", Toast.LENGTH_SHORT).show()
+            }
+            working = false
+        }
+    }
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+        horizontalArrangement = Arrangement.End
+    ) {
+        if (hasTest) {
+            TextButton(onClick = { launch { TripMemberNames.removeTestMembers(trip) } }) {
+                Text("테스트 멤버 지우기", fontSize = 12.sp, color = Color(0xFFE53935))
+            }
+        }
+        TextButton(onClick = { launch { TripMemberNames.addTestMember(trip) } }) {
+            Text("+ 테스트 멤버 추가", fontSize = 12.sp, color = Color.White)
         }
     }
 }
