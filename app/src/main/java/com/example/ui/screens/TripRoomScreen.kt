@@ -144,7 +144,7 @@ fun TripRoomScreen(
             onBack = onBack,
             onEdit = { if (loaded != null) editing = true },
             onInvite = { loaded?.trip?.inviteCode?.let(copyInviteCode) },
-            showMembers = currentTab == RoomTab.Home
+            showMembers = currentTab != RoomTab.Schedule
         )
 
         Box(

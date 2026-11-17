@@ -1,5 +1,7 @@
 package com.example.ui.screens
 
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.ui.draw.shadow
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -69,6 +71,7 @@ private val BudgetText = Color(0xFF202020)
 private val BudgetGray = Color(0xFF727272)
 private val BudgetLine = Color(0xFFDCE6F2)
 private val ExpenseBorder = Color(0xFFEEEEEE)
+private val TabSelectedBlue = Color(0xFF197CF0)
 private val BudgetMemberColors = listOf(
     Color(0xFF262452), Color(0xFFFF7A4D), Color(0xFF4A90E2),
     Color(0xFF34C38F), Color(0xFF9B6BDF), Color(0xFFF5A623)
@@ -89,8 +92,9 @@ private fun memberColor(uid: String, members: List<String>): Color =
 internal fun won(amount: Long): String = NumberFormat.getNumberInstance(Locale.KOREA).format(amount) + "원"
 
 /**
- * 여행룸 하단 [가계부] 탭 내용.
- * 총 공동 지출액 → 멤버별 결제 금액 → [지출 목록 | 소비 분석 | 정산하기] → 지출 목록 → [+ 지출 추가]
+ * 여행룸 하단 [가계부] 탭 내용 (피그마 새 UI).
+ * [지출 목록 | 소비 분석 | 정산하기] → (지출 목록) 총 공동 지출액 카드 → 지출 내역
+ * [지출 추가] 버튼은 목록을 스크롤해도 화면 아래에 떠 있습니다.
  */
 @Composable
 fun BudgetContent(trip: Trip, myUid: String?) {
@@ -113,91 +117,68 @@ fun BudgetContent(trip: Trip, myUid: String?) {
     val list = expenses.orEmpty()
     val summary = remember(members, list) { BudgetCalculator.summarize(members, list) }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-    ) {
-        // 공동 지출 요약
+    Box(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .background(Color.White)
-                .padding(start = 24.dp, end = 24.dp, top = 14.dp, bottom = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
         ) {
-            Text("총 공동 지출액", fontSize = 13.sp, color = BudgetGray)
-            Row(verticalAlignment = Alignment.Bottom) {
-                Text(
-                    text = won(summary.total),
-                    fontSize = 30.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = BudgetText,
-                    modifier = Modifier.testTag("budget_total")
-                )
-                Spacer(Modifier.width(10.dp))
-                // 1/N 결과
-                Text(
-                    text = splitSummaryText(summary.total, members, list, summary.share[myUid]),
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = BudgetBlue,
-                    modifier = Modifier
-                        .padding(bottom = 6.dp)
-                        .testTag("budget_per_person")
-                )
-            }
-            MemberSpendCard(members = members, myUid = myUid, paid = summary.paid, share = summary.share)
-        }
+            BudgetTabs(
+                selected = tab,
+                onSelect = { tab = it },
+                modifier = Modifier.padding(start = 21.dp, end = 21.dp, top = 18.dp, bottom = 18.dp)
+            )
 
-        // 가계부 카테고리 탭
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            BudgetTab.entries.forEach { t ->
-                val selected = t == tab
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(40.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(if (selected) BudgetBlue else Color.White)
-                        .border(1.dp, if (selected) BudgetBlue else BudgetLine, RoundedCornerShape(10.dp))
-                        .clickable { tab = t }
-                        .testTag("budget_tab_${t.name}"),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = t.label,
-                        fontSize = 14.sp,
-                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                        color = if (selected) Color.White else BudgetGray
+            when (tab) {
+                BudgetTab.List -> {
+                    TotalSpendCard(
+                        total = summary.total,
+                        perPersonText = splitSummaryText(summary.total, members, list, summary.share[myUid]),
+                        members = members,
+                        myUid = myUid,
+                        paid = summary.paid,
+                        modifier = Modifier.padding(horizontal = 20.dp)
                     )
+                    Spacer(Modifier.height(17.dp))
+                    ExpenseListSection(
+                        expenses = expenses,
+                        loadError = loadError,
+                        members = members,
+                        myUid = myUid
+                    )
+                    // 떠 있는 [지출 추가] 버튼에 마지막 지출이 가리지 않게 여백
+                    Spacer(Modifier.height(80.dp))
                 }
+                BudgetTab.Analysis -> SpendingAnalysisSection(expenses = list)
+                BudgetTab.Settle -> SettlementSection(
+                    members = members,
+                    myUid = myUid,
+                    expenses = list,
+                    summary = summary
+                )
             }
         }
 
-        when (tab) {
-            BudgetTab.List -> ExpenseListSection(
-                expenses = expenses,
-                loadError = loadError,
-                members = members,
-                myUid = myUid,
-                onAddClick = {
-                    viewModel.clearError()
-                    showAdd = true
-                }
-            )
-            BudgetTab.Analysis -> SpendingAnalysisSection(expenses = list)
-            BudgetTab.Settle -> SettlementSection(
-                members = members,
-                myUid = myUid,
-                expenses = list,
-                summary = summary
-            )
+        // 지출 목록에서만 아래에 떠 있는 [지출 추가]
+        if (tab == BudgetTab.List) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 17.dp)
+                    .width(136.dp)
+                    .height(48.dp)
+                    .shadow(4.dp, RoundedCornerShape(25.dp))
+                    .clip(RoundedCornerShape(25.dp))
+                    .background(BudgetBlue)
+                    .clickable {
+                        viewModel.clearError()
+                        showAdd = true
+                    }
+                    .testTag("budget_add_expense_button"),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("지출 추가", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
+            }
         }
     }
 
@@ -217,7 +198,7 @@ fun BudgetContent(trip: Trip, myUid: String?) {
 
 /** "2명 · 1인당 90,000원" (모든 지출을 전원이 나눌 때) / 아니면 "내 부담 OO원" */
 private fun splitSummaryText(total: Long, members: List<String>, expenses: List<Expense>, myShare: Long?): String {
-    if (members.isEmpty()) return ""
+    if (members.isEmpty() || total == 0L) return ""
     val everyoneSplits = expenses.all { it.splitAmong.isEmpty() || it.splitAmong.toSet() == members.toSet() }
     return if (everyoneSplits) {
         "${members.size}명 · 1인당 ${won(total / members.size)}"
@@ -226,63 +207,107 @@ private fun splitSummaryText(total: Long, members: List<String>, expenses: List<
     }
 }
 
-/** 멤버별 결제 금액 카드 (피그마 "멤버별 지출 금액") */
+/** [지출 목록 | 소비 분석 | 정산하기] 한 줄 탭 (사이에 세로 구분선, 선택된 탭은 파란 글씨) */
 @Composable
-private fun MemberSpendCard(
-    members: List<String>,
-    myUid: String?,
-    paid: Map<String, Long>,
-    share: Map<String, Long>
-) {
-    val scroll = rememberScrollState()
+private fun BudgetTabs(selected: BudgetTab, onSelect: (BudgetTab) -> Unit, modifier: Modifier = Modifier) {
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
-            .height(52.dp)
+            .height(48.dp)
             .clip(RoundedCornerShape(10.dp))
             .background(Color.White)
-            .border(1.dp, BudgetLine, RoundedCornerShape(10.dp))
-            .horizontalScroll(scroll)
-            .padding(horizontal = 12.dp)
-            .testTag("budget_member_card"),
+            .border(1.dp, BudgetLine, RoundedCornerShape(10.dp)),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        members.forEachIndexed { index, uid ->
-            if (index > 0) {
+        BudgetTab.entries.forEachIndexed { i, t ->
+            if (i > 0) {
                 Box(
-                    modifier = Modifier
-                        .padding(horizontal = 12.dp)
+                    Modifier
                         .width(1.dp)
                         .height(26.dp)
                         .background(BudgetLine)
                 )
             }
-            Row(
-                modifier = Modifier.widthIn(min = if (members.size <= 2) 130.dp else 110.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(7.dp)
+            val isSelected = t == selected
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .clickable { onSelect(t) }
+                    .testTag("budget_tab_${t.name}"),
+                contentAlignment = Alignment.Center
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(26.dp)
-                        .clip(CircleShape)
-                        .background(memberColor(uid, members)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(memberInitial(uid, members, myUid), fontSize = 12.sp, fontWeight = FontWeight.Medium, color = Color.White)
-                }
-                Column {
-                    Text(
-                        text = "${memberName(uid, members, myUid)} · 부담 ${won(share[uid] ?: 0)}",
-                        fontSize = 10.sp,
-                        color = BudgetGray
-                    )
-                    Text(
-                        text = won(paid[uid] ?: 0),
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = BudgetText
-                    )
+                Text(
+                    text = t.label,
+                    fontSize = if (isSelected) 14.sp else 13.sp,
+                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                    color = if (isSelected) TabSelectedBlue else BudgetGray
+                )
+            }
+        }
+    }
+}
+
+/** 총 공동 지출액 카드: 큰 금액 + 오른쪽 아래 멤버별 결제 금액 */
+@Composable
+private fun TotalSpendCard(
+    total: Long,
+    perPersonText: String,
+    members: List<String>,
+    myUid: String?,
+    paid: Map<String, Long>,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .shadow(4.dp, RoundedCornerShape(10.dp), ambientColor = BudgetBlue, spotColor = BudgetBlue)
+            .clip(RoundedCornerShape(10.dp))
+            .background(Color.White)
+            .border(1.dp, BudgetBlue, RoundedCornerShape(10.dp))
+            .padding(start = 23.dp, end = 14.dp, top = 13.dp, bottom = 12.dp)
+            .testTag("budget_member_card")
+    ) {
+        Text("총 공동 지출액", fontSize = 13.sp, color = BudgetGray)
+        Spacer(Modifier.height(6.dp))
+        Text(
+            text = won(total),
+            fontSize = 30.sp,
+            fontWeight = FontWeight.Bold,
+            color = BudgetText,
+            modifier = Modifier.testTag("budget_total")
+        )
+        Spacer(Modifier.height(10.dp))
+        Row(verticalAlignment = Alignment.Bottom) {
+            // 1/N 계산 결과
+            Text(
+                text = perPersonText,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+                color = BudgetBlue,
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(bottom = 2.dp)
+                    .testTag("budget_per_person")
+            )
+            Row(
+                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                members.forEachIndexed { index, uid ->
+                    if (index > 0) {
+                        Box(
+                            Modifier
+                                .padding(horizontal = 10.dp)
+                                .width(1.dp)
+                                .height(26.dp)
+                                .background(BudgetLine)
+                        )
+                    }
+                    Column {
+                        Text(memberName(uid, members, myUid), fontSize = 10.sp, color = BudgetGray)
+                        Text(won(paid[uid] ?: 0), fontSize = 13.sp, fontWeight = FontWeight.Bold, color = BudgetText)
+                    }
                 }
             }
         }
@@ -294,14 +319,13 @@ private fun ExpenseListSection(
     expenses: List<Expense>?,
     loadError: String?,
     members: List<String>,
-    myUid: String?,
-    onAddClick: () -> Unit
+    myUid: String?
 ) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 24.dp, end = 24.dp, top = 6.dp, bottom = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+            .padding(horizontal = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         when {
             loadError != null -> Text(loadError, fontSize = 13.sp, color = Color(0xFFE53935))
@@ -320,30 +344,25 @@ private fun ExpenseListSection(
             )
             else -> expenses.forEach { e -> ExpenseItem(e, members, myUid) }
         }
-
-        Spacer(Modifier.height(4.dp))
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(48.dp)
-                .clip(RoundedCornerShape(10.dp))
-                .background(BudgetBlue)
-                .clickable(onClick = onAddClick)
-                .testTag("budget_add_expense_button"),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(Icons.Filled.Add, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(7.dp))
-            Text("지출 추가", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
-        }
     }
+}
+
+/** 해시태그(분류) 칩 색: 글자색 to 배경색 */
+private fun categoryColors(category: String): Pair<Color, Color> = when (category) {
+    "숙박" -> Color(0xFF197CF0) to Color(0x3D197CF0)
+    "식비" -> Color(0xFFE35626) to Color(0x2EFF7A4D)
+    "카페" -> Color(0xFF8B5E3C) to Color(0x2E8B5E3C)
+    "교통" -> Color(0xFF2E8B7E) to Color(0x2E5FB3A8)
+    "관광" -> Color(0xFF7A6CC4) to Color(0x2E9187CF)
+    "쇼핑" -> Color(0xFFD08A00) to Color(0x2EF5B942)
+    else -> Color(0xFF727272) to Color(0x29B0B0B0)
 }
 
 /** 지출 1건 카드 (피그마 "지출 내역") */
 @Composable
 private fun ExpenseItem(expense: Expense, members: List<String>, myUid: String?) {
     val splitCount = expense.splitAmong.ifEmpty { members }.size
+    val (chipText, chipBg) = categoryColors(expense.category)
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -354,25 +373,47 @@ private fun ExpenseItem(expense: Expense, members: List<String>, myUid: String?)
             .testTag("expense_${expense.expenseId}"),
         verticalArrangement = Arrangement.spacedBy(1.dp)
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = expense.title,
-                modifier = Modifier.weight(1f),
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold,
-                color = BudgetText,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+        Row(
+            modifier = Modifier.height(28.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = expense.title,
+                    modifier = Modifier.weight(1f, fill = false),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = BudgetText,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(Modifier.width(9.dp))
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(25.dp))
+                        .background(chipBg)
+                        .padding(horizontal = 11.dp, vertical = 2.dp)
+                ) {
+                    Text(expense.category, fontSize = 11.sp, color = chipText)
+                }
+            }
+            Spacer(Modifier.width(8.dp))
             Text(won(expense.amount), fontSize = 15.sp, fontWeight = FontWeight.Bold, color = BudgetText)
         }
-        Row {
-            Text("#${expense.category}", modifier = Modifier.weight(1f), fontSize = 11.sp, color = BudgetBlue)
-            Text("${memberName(expense.paidBy, members, myUid)} 결제", fontSize = 11.sp, color = BudgetGray)
-        }
-        Row {
+        Row(
+            modifier = Modifier.height(22.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Text(expenseTime(expense.spentAt), modifier = Modifier.weight(1f), fontSize = 11.sp, color = BudgetGray)
-            Text("${splitCount}명 분담", fontSize = 11.sp, color = BudgetGray)
+            Text("결제자 ${memberName(expense.paidBy, members, myUid)}", fontSize = 11.sp, color = BudgetGray)
+            Box(
+                Modifier
+                    .padding(horizontal = 5.dp)
+                    .width(1.dp)
+                    .height(15.dp)
+                    .background(Color(0x669E9E9E))
+            )
+            Text("결제 인원 ${splitCount}명", fontSize = 11.sp, color = BudgetGray)
         }
     }
 }
