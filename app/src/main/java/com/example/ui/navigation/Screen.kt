@@ -5,5 +5,6 @@ enum class Screen {
     Login,
     SignUp,
     Home,
-    TripRoom
+    TripRoom,
+    Account
 }

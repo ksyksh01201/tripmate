@@ -24,8 +24,6 @@ import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DatePickerDialog
-import androidx.compose.material3.DateRangePicker
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -33,11 +31,9 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.SelectableDates
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberDateRangePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -89,6 +85,8 @@ fun CreateTripDialog(
     var endMillis by rememberSaveable { mutableStateOf<Long?>(null) }
     var companion by rememberSaveable { mutableStateOf<CompanionType?>(null) }
     var showDatePicker by remember { mutableStateOf(false) }
+    // 종료일 칸을 눌러서 열었으면 달력도 종료일 고르기부터 시작
+    var openAtEnd by remember { mutableStateOf(false) }
 
     val canSubmit = destination != null && startMillis != null && endMillis != null &&
         companion != null && !isSubmitting
@@ -127,7 +125,8 @@ fun CreateTripDialog(
                 DateRangeField(
                     startMillis = startMillis,
                     endMillis = endMillis,
-                    onClick = { showDatePicker = true }
+                    onStartClick = { openAtEnd = false; showDatePicker = true },
+                    onEndClick = { openAtEnd = true; showDatePicker = true }
                 )
 
                 Spacer(Modifier.height(20.dp))
@@ -174,6 +173,7 @@ fun CreateTripDialog(
         TripDateRangePickerDialog(
             initialStart = startMillis,
             initialEnd = endMillis,
+            openAtEnd = openAtEnd,
             onDismiss = { showDatePicker = false },
             onConfirm = { start, end ->
                 startMillis = start
@@ -224,7 +224,12 @@ private fun CityDropdown(selected: String?, onSelect: (String) -> Unit) {
 }
 
 @Composable
-private fun DateRangeField(startMillis: Long?, endMillis: Long?, onClick: () -> Unit) {
+private fun DateRangeField(
+    startMillis: Long?,
+    endMillis: Long?,
+    onStartClick: () -> Unit,
+    onEndClick: () -> Unit
+) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically
@@ -235,7 +240,7 @@ private fun DateRangeField(startMillis: Long?, endMillis: Long?, onClick: () -> 
             trailing = {
                 Icon(Icons.Outlined.CalendarMonth, contentDescription = "달력 열기", tint = Blue)
             },
-            onClick = onClick,
+            onClick = onStartClick,
             modifier = Modifier
                 .weight(1f)
                 .testTag("create_trip_start_date_field")
@@ -251,7 +256,7 @@ private fun DateRangeField(startMillis: Long?, endMillis: Long?, onClick: () -> 
             trailing = {
                 Icon(Icons.Outlined.CalendarMonth, contentDescription = "달력 열기", tint = Blue)
             },
-            onClick = onClick,
+            onClick = onEndClick,
             modifier = Modifier
                 .weight(1f)
                 .testTag("create_trip_end_date_field")
@@ -301,51 +306,24 @@ private fun CompanionChips(selected: CompanionType?, onSelect: (CompanionType) -
     }
 }
 
-/** 달력 팝업: 시작일과 종료일을 한 번에 고릅니다. 오늘 이전 날짜는 고를 수 없습니다. */
-@OptIn(ExperimentalMaterial3Api::class)
+/** 달력 팝업: 시작일과 종료일을 한 번에 고릅니다. 오늘 이전 날짜는 고를 수 없습니다. (화면은 KoreanDateRangePicker.kt) */
 @Composable
 private fun TripDateRangePickerDialog(
     initialStart: Long?,
     initialEnd: Long?,
+    openAtEnd: Boolean,
     onDismiss: () -> Unit,
     onConfirm: (start: Long, end: Long) -> Unit
 ) {
     val todayUtcMillis = remember { todayAsUtcMillis() }
-    val state = rememberDateRangePickerState(
-        initialSelectedStartDateMillis = initialStart,
-        initialSelectedEndDateMillis = initialEnd,
-        selectableDates = object : SelectableDates {
-            override fun isSelectableDate(utcTimeMillis: Long): Boolean = utcTimeMillis >= todayUtcMillis
-        }
+    KoreanDateRangePickerDialog(
+        initialStart = initialStart,
+        initialEnd = initialEnd,
+        startWithEnd = openAtEnd,
+        todayMillis = todayUtcMillis,
+        onDismiss = onDismiss,
+        onConfirm = onConfirm
     )
-    val start = state.selectedStartDateMillis
-
-    DatePickerDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = {
-            TextButton(
-                enabled = start != null,
-                // 종료일을 안 고르면 당일치기로 봅니다.
-                onClick = { start?.let { onConfirm(it, state.selectedEndDateMillis ?: it) } }
-            ) { Text("확인", color = if (start != null) Blue else Placeholder) }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("취소", color = Placeholder) }
-        }
-    ) {
-        DateRangePicker(
-            state = state,
-            modifier = Modifier.weight(1f),
-            title = {
-                Text(
-                    text = "여행 날짜를 선택하세요",
-                    modifier = Modifier.padding(start = 24.dp, top = 16.dp),
-                    fontWeight = FontWeight.Bold
-                )
-            },
-            showModeToggle = false
-        )
-    }
 }
 
 // ---------- 두 팝업에서 함께 쓰는 작은 컴포넌트 ----------

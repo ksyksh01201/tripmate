@@ -15,6 +15,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import com.example.data.AccountStore
+import com.example.ui.screens.AccountScreen
 import com.example.ui.navigation.Screen
 import com.example.ui.screens.HomeRoute
 import com.example.ui.screens.LoginScreen
@@ -44,6 +47,7 @@ class MainActivity : ComponentActivity() {
 fun TripMateApp() {
     var currentScreen by rememberSaveable { mutableStateOf(Screen.Splash) }
     var currentTripId by rememberSaveable { mutableStateOf<String?>(null) }
+    val context = LocalContext.current
 
     when (currentScreen) {
         Screen.Splash -> {
@@ -57,7 +61,8 @@ fun TripMateApp() {
             }
             LoginScreen(
                 onNavigateToSignUp = { currentScreen = Screen.SignUp },
-                onLoginSuccess = { _ ->
+                onLoginSuccess = { email ->
+                    AccountStore.saveLogin(context, email)
                     currentScreen = Screen.Home
                 }
             )
@@ -79,7 +84,14 @@ fun TripMateApp() {
                 onOpenTrip = { tripId ->
                     currentTripId = tripId
                     currentScreen = Screen.TripRoom
-                }
+                },
+                onOpenAccount = { currentScreen = Screen.Account }
+            )
+        }
+        Screen.Account -> {
+            AccountScreen(
+                onBack = { currentScreen = Screen.Home },
+                onLoggedOut = { currentScreen = Screen.Login }
             )
         }
         Screen.TripRoom -> {

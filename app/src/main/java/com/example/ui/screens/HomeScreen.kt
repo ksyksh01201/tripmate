@@ -51,7 +51,9 @@ import com.example.ui.theme.TripMateTextSecondary
 fun HomeScreen(
     modifier: Modifier = Modifier,
     onCreateTripClick: () -> Unit = {},
-    onJoinTripClick: () -> Unit = {}
+    onJoinTripClick: () -> Unit = {},
+    onLogoutClick: () -> Unit = {},
+    onWithdrawClick: () -> Unit = {}
 ) {
     Box(
         modifier = modifier
@@ -64,7 +66,7 @@ fun HomeScreen(
             modifier = Modifier.fillMaxSize()
         ) {
             // 상단 앱 바: 왼쪽 파란색 tripmate 로고, 오른쪽 회색 설정 아이콘
-            HomeTopBar()
+            HomeTopBar(onLogoutClick = onLogoutClick, onWithdrawClick = onWithdrawClick)
 
             // 중앙 및 하단 영역
             Column(
@@ -157,7 +159,7 @@ fun HomeScreen(
 }
 
 @Composable
-private fun HomeTopBar() {
+private fun HomeTopBar(onLogoutClick: () -> Unit = {}, onWithdrawClick: () -> Unit = {}) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -169,20 +171,10 @@ private fun HomeTopBar() {
             color = Color(0xFF4A90E2),
             fontSize = 32.sp
         )
-        IconButton(
-            onClick = {
-                // 현재 UI 단계: 클릭 동작 없음
-            },
-            modifier = Modifier
-                .size(40.dp)
-                .testTag("home_settings_button")
-        ) {
-            Icon(
-                imageVector = Icons.Outlined.Settings,
-                contentDescription = "설정",
-                tint = Color(0xFFB0B0B0),
-                modifier = Modifier.size(26.dp)
-            )
-        }
+        // 톱니바퀴 → [로그아웃] [탈퇴]
+        com.example.ui.components.SettingsMenuButton(
+            onLogoutClick = onLogoutClick,
+            onWithdrawClick = onWithdrawClick
+        )
     }
 }
