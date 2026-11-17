@@ -94,7 +94,7 @@ private val MapGray = Color(0xFF727272)
 private val MapLine = Color(0xFFDCE6F2)
 
 /** 여행 도시 → 지도 처음 위치 (일정에 좌표가 하나도 없을 때 사용) */
-private val CityCenters = mapOf(
+internal val CityCenters = mapOf(
     "서울" to (37.5665 to 126.9780), "부산" to (35.1796 to 129.0756), "제주" to (33.4996 to 126.5312),
     "강릉" to (37.7519 to 128.8761), "여수" to (34.7604 to 127.6622), "경주" to (35.8562 to 129.2247),
     "전주" to (35.8242 to 127.1480), "속초" to (38.2070 to 128.5918), "인천" to (37.4563 to 126.7052),
@@ -396,7 +396,7 @@ private fun PlaceResultRow(
 
 /** 카카오맵 MapView 를 Compose 안에 넣고, 화면 생명주기에 맞춰 resume/pause/finish 합니다. */
 @Composable
-private fun KakaoMapView(
+internal fun KakaoMapView(
     startLat: Double,
     startLng: Double,
     onReady: (KakaoMap) -> Unit,

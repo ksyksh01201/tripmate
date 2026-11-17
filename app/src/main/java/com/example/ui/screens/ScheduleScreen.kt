@@ -1,6 +1,35 @@
 package com.example.ui.screens
 
 import android.widget.Toast
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animate
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.lazy.LazyListItemInfo
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Velocity
+import androidx.compose.ui.zIndex
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -76,10 +105,14 @@ private val ScheduleText = Color(0xFF202020)
 private val ScheduleGray = Color(0xFF727272)
 private val ScheduleLine = Color(0xFFDCE6F2)
 private val ScheduleCardBorder = Color(0xFFEEEEEE)
+private val ScheduleSheetBackground = Color(0xFFFCFCFC)
+private val ScheduleDeleteRed = Color(0xFFE53935)
 
 /**
  * 여행룸 하단 [일정] 탭 내용.
- * [1일차 | 2일차 | 3일차] → "8월 1일 토요일 / 지도 보기" → "N개의 일정" → 번호 타임라인 → [+ 일정 추가]
+ * 기본: [1일차 | 2일차 | 3일차] → "8월 1일 토요일 · N개의 일정" → 번호 타임라인 → [+ 일정 추가]
+ * 일정 시트를 아래로 스와이프하면 위쪽에 지도가 펼쳐지고, 그날 일정이 순서대로 이동경로로 표시됩니다.
+ * 일정 카드를 길게 누르면 파랗게 바뀌고 끌어서 순서를 바꿀 수 있습니다.
  */
 @Composable
 fun ScheduleContent(trip: Trip) {
@@ -90,7 +123,6 @@ fun ScheduleContent(trip: Trip) {
     val schedules by viewModel.schedules.collectAsStateWithLifecycle()
     val loadError by viewModel.loadError.collectAsStateWithLifecycle()
     val editState by viewModel.editState.collectAsStateWithLifecycle()
-    val context = LocalContext.current
 
     val days = remember(trip.startDate, trip.endDate) { TripDays.of(trip) }
     var selectedIndex by rememberSaveable { mutableIntStateOf(0) }
@@ -109,101 +141,231 @@ fun ScheduleContent(trip: Trip) {
     }
 
     val daySchedules = schedules.orEmpty().filter { it.day == selectedDay.index }
+    // 끌어서 순서를 바꾸는 동안 화면에 보여 줄 목록 (놓으면 Firestore에 저장)
+    var ordered by remember(daySchedules) { mutableStateOf(daySchedules) }
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        DayTabs(
-            days = days,
-            selectedIndex = selectedDay.index,
-            onSelect = { selectedIndex = it },
-            modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 24.dp)
-        )
-        Spacer(Modifier.height(22.dp))
+    val scope = rememberCoroutineScope()
+    val listState = rememberLazyListState()
+    val dragState = remember(listState) { ScheduleDragState(listState, scope) }
+    dragState.onMove = { from, to ->
+        ordered = ordered.toMutableList().apply { add(to, removeAt(from)) }
+    }
+    dragState.onDrop = { if (ordered.map { it.scheduleId } != daySchedules.map { it.scheduleId }) viewModel.reorder(ordered) }
+    LaunchedEffect(dragState) { dragState.runAutoScroll() }
 
-        // 하루 요약: "8월 1일 토요일"  ……  [지도] 지도 보기
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(26.dp)
-                .padding(horizontal = 24.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Text(selectedDay.longDate, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = ScheduleText)
-            Row(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(6.dp))
-                    .clickable { showMap = true }
-                    .padding(horizontal = 4.dp, vertical = 2.dp)
-                    .testTag("schedule_open_map"),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Icon(Icons.Outlined.Map, contentDescription = null, tint = ScheduleBlue, modifier = Modifier.size(16.dp))
-                Text("지도 보기", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = ScheduleBlue)
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val density = LocalDensity.current
+        val maxOffsetPx = constraints.maxHeight * MAP_OPEN_RATIO
+        var sheetOffset by remember { mutableFloatStateOf(0f) }
+        var mapActivated by remember { mutableStateOf(false) }
+        LaunchedEffect(Unit) { snapshotFlow { sheetOffset > 0f }.collect { if (it) mapActivated = true } }
+
+        // 지도를 열고 닫을 때 손을 놓으면 가까운 쪽으로 붙기
+        suspend fun settle(velocity: Float) {
+            val target = when {
+                velocity > 800f -> maxOffsetPx
+                velocity < -800f -> 0f
+                sheetOffset > maxOffsetPx / 2 -> maxOffsetPx
+                else -> 0f
             }
-        }
-        Text(
-            text = "${daySchedules.size}개의 일정",
-            fontSize = 12.sp,
-            color = ScheduleGray,
-            modifier = Modifier.padding(horizontal = 24.dp)
-        )
-
-        loadError?.let {
-            Text(it, color = Color(0xFFCF592D), fontSize = 12.sp, modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp))
+            animate(sheetOffset, target, initialVelocity = velocity) { value, _ -> sheetOffset = value }
         }
 
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-        ) {
-            when {
-                schedules == null -> CircularProgressIndicator(color = ScheduleBlue, modifier = Modifier.align(Alignment.Center))
-                daySchedules.isEmpty() -> Text(
-                    text = "아직 일정이 없어요.\n아래 [일정 추가]로 가고 싶은 곳을 넣어 보세요.",
-                    color = ScheduleGray,
-                    fontSize = 14.sp,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.align(Alignment.Center)
-                )
-                else -> LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(start = 24.dp, end = 24.dp, top = 12.dp, bottom = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    itemsIndexed(daySchedules, key = { _, s -> s.scheduleId }) { i, schedule ->
-                        ScheduleRow(
-                            number = i + 1,
-                            schedule = schedule,
-                            isLast = i == daySchedules.lastIndex,
-                            canMoveUp = i > 0,
-                            canMoveDown = i < daySchedules.lastIndex,
-                            onMoveUp = { viewModel.swap(schedule, daySchedules[i - 1]) },
-                            onMoveDown = { viewModel.swap(schedule, daySchedules[i + 1]) },
-                            onDelete = { viewModel.delete(schedule) }
-                        )
+        // 목록 맨 위에서 아래로 당기면 지도가 열리고, 위로 밀면 다시 닫힘
+        val nestedScroll = remember(maxOffsetPx) {
+            object : NestedScrollConnection {
+                override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                    if (available.y < 0 && sheetOffset > 0f) {
+                        val before = sheetOffset
+                        sheetOffset = (sheetOffset + available.y).coerceAtLeast(0f)
+                        return Offset(0f, sheetOffset - before)
                     }
+                    return Offset.Zero
+                }
+
+                override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+                    if (available.y > 0 && source == NestedScrollSource.UserInput && !dragState.isDragging) {
+                        val before = sheetOffset
+                        sheetOffset = (sheetOffset + available.y).coerceAtMost(maxOffsetPx)
+                        return Offset(0f, sheetOffset - before)
+                    }
+                    return Offset.Zero
+                }
+
+                override suspend fun onPreFling(available: Velocity): Velocity {
+                    if (sheetOffset > 0f && sheetOffset < maxOffsetPx) {
+                        settle(available.y)
+                        return available
+                    }
+                    return Velocity.Zero
                 }
             }
         }
+        val headerDrag = rememberDraggableState { delta ->
+            sheetOffset = (sheetOffset + delta).coerceIn(0f, maxOffsetPx)
+        }
 
-        // + 일정 추가
-        Row(
+        // 뒤쪽 지도 (처음 내려 볼 때 만들어짐)
+        if (mapActivated) {
+            ScheduleRouteMap(
+                places = ordered.filter { it.lat != null && it.lng != null },
+                allSchedules = ordered,
+                destination = trip.destination,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(with(density) { maxOffsetPx.toDp() } + 28.dp)
+            )
+        }
+
+        // 일정 시트
+        Column(
             modifier = Modifier
-                .padding(start = 24.dp, end = 24.dp, top = 12.dp, bottom = 16.dp)
-                .fillMaxWidth()
-                .height(50.dp)
-                .clip(RoundedCornerShape(10.dp))
-                .background(ScheduleBlue)
-                .clickable { viewModel.clearError(); showAdd = true }
-                .testTag("schedule_add"),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically
+                .fillMaxSize()
+                .layout { measurable, constraints ->
+                    val off = sheetOffset.roundToInt().coerceIn(0, constraints.maxHeight)
+                    val h = constraints.maxHeight - off
+                    val placeable = measurable.measure(constraints.copy(minHeight = h, maxHeight = h))
+                    layout(constraints.maxWidth, constraints.maxHeight) { placeable.place(0, off) }
+                }
+                .shadow(if (sheetOffset > 0f) 8.dp else 0.dp, RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
+                .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
+                .background(ScheduleSheetBackground)
+                .nestedScroll(nestedScroll)
         ) {
-            Icon(Icons.Filled.Add, contentDescription = null, tint = Color.White, modifier = Modifier.size(19.dp))
-            Spacer(Modifier.width(7.dp))
-            Text("일정 추가", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            // 손잡이 + 일차 탭 + 하루 요약: 여기를 위아래로 끌어서 지도 열기/닫기
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .draggable(
+                        state = headerDrag,
+                        orientation = Orientation.Vertical,
+                        onDragStopped = { velocity -> settle(velocity) }
+                    )
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(24.dp)
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) {
+                            scope.launch { settle(if (sheetOffset > 0f) -1000f else 1000f) }
+                        }
+                        .testTag("schedule_sheet_handle"),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        repeat(2) {
+                            Box(
+                                Modifier
+                                    .width(30.dp)
+                                    .height(2.dp)
+                                    .clip(RoundedCornerShape(1.dp))
+                                    .background(Color(0xFFB5B5B5))
+                            )
+                        }
+                    }
+                }
+                DayTabs(
+                    days = days,
+                    selectedIndex = selectedDay.index,
+                    onSelect = { selectedIndex = it },
+                    modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 8.dp)
+                )
+                Spacer(Modifier.height(18.dp))
+
+                // 하루 요약: "8월 1일 토요일"  ……  "3개의 일정"
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(26.dp)
+                        .padding(horizontal = 24.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(selectedDay.longDate, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = ScheduleText)
+                    Text("${ordered.size}개의 일정", fontSize = 12.sp, color = ScheduleGray)
+                }
+            }
+
+            loadError?.let {
+                Text(it, color = Color(0xFFCF592D), fontSize = 12.sp, modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp))
+            }
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+            ) {
+                when {
+                    schedules == null -> CircularProgressIndicator(color = ScheduleBlue, modifier = Modifier.align(Alignment.Center))
+                    ordered.isEmpty() -> Text(
+                        text = "아직 일정이 없어요.\n아래 [일정 추가]로 가고 싶은 곳을 넣어 보세요.",
+                        color = ScheduleGray,
+                        fontSize = 14.sp,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .verticalScroll(rememberScrollState())
+                    )
+                    else -> LazyColumn(
+                        state = listState,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .pointerInput(dragState) {
+                                detectDragGesturesAfterLongPress(
+                                    onDragStart = { dragState.onDragStart(it) },
+                                    onDrag = { change, amount ->
+                                        change.consume()
+                                        dragState.onDrag(amount.y)
+                                    },
+                                    onDragEnd = { dragState.onDragEnd() },
+                                    onDragCancel = { dragState.onDragEnd() }
+                                )
+                            },
+                        contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 12.dp, bottom = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        itemsIndexed(ordered, key = { _, s -> s.scheduleId }) { i, schedule ->
+                            val dragging = dragState.draggingIndex == i
+                            val itemModifier = if (dragging) {
+                                Modifier
+                                    .zIndex(1f)
+                                    .graphicsLayer { translationY = dragState.draggingItemOffset }
+                            } else {
+                                Modifier.animateItem()
+                            }
+                            ScheduleRow(
+                                number = i + 1,
+                                schedule = schedule,
+                                isLast = i == ordered.lastIndex,
+                                dragging = dragging,
+                                onDelete = { viewModel.delete(schedule) },
+                                modifier = itemModifier
+                            )
+                        }
+                    }
+                }
+            }
+
+            // + 일정 추가
+            Row(
+                modifier = Modifier
+                    .padding(start = 24.dp, end = 24.dp, top = 12.dp, bottom = 16.dp)
+                    .fillMaxWidth()
+                    .height(50.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(ScheduleBlue)
+                    .clickable { viewModel.clearError(); showAdd = true }
+                    .testTag("schedule_add"),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Filled.Add, contentDescription = null, tint = Color.White, modifier = Modifier.size(19.dp))
+                Spacer(Modifier.width(7.dp))
+                Text("일정 추가", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            }
         }
     }
 
@@ -243,6 +405,82 @@ fun ScheduleContent(trip: Trip) {
     }
 }
 
+/** 지도가 펼쳐졌을 때 화면 높이 중 지도가 차지하는 비율 */
+private const val MAP_OPEN_RATIO = 0.5f
+
+/**
+ * 길게 눌러 끌어서 순서 바꾸기 상태.
+ * (Compose 공식 예제 LazyColumnDragAndDropDemo 방식: 끄는 카드 가운데가 다른 카드 위로 가면 자리 교체,
+ *  목록 끝에 닿으면 자동 스크롤)
+ */
+private class ScheduleDragState(
+    private val listState: LazyListState,
+    private val scope: CoroutineScope
+) {
+    var onMove: (Int, Int) -> Unit = { _, _ -> }
+    var onDrop: () -> Unit = {}
+
+    var draggingIndex by mutableStateOf<Int?>(null)
+        private set
+    private var draggedDelta by mutableFloatStateOf(0f)
+    private var initialOffset by mutableIntStateOf(0)
+    private val scrollChannel = Channel<Float>(Channel.CONFLATED)
+
+    val isDragging: Boolean get() = draggingIndex != null
+
+    private val draggingItemInfo: LazyListItemInfo?
+        get() = draggingIndex?.let { idx -> listState.layoutInfo.visibleItemsInfo.firstOrNull { it.index == idx } }
+
+    val draggingItemOffset: Float
+        get() = draggingItemInfo?.let { initialOffset + draggedDelta - it.offset } ?: 0f
+
+    fun onDragStart(position: Offset) {
+        listState.layoutInfo.visibleItemsInfo
+            .firstOrNull { position.y.toInt() in it.offset..(it.offset + it.size) }
+            ?.let {
+                draggingIndex = it.index
+                initialOffset = it.offset
+                draggedDelta = 0f
+            }
+    }
+
+    fun onDrag(dy: Float) {
+        draggedDelta += dy
+        val item = draggingItemInfo ?: return
+        val start = initialOffset + draggedDelta
+        val end = start + item.size
+        val middle = start + item.size / 2f
+        val target = listState.layoutInfo.visibleItemsInfo.firstOrNull {
+            middle.toInt() in it.offset..(it.offset + it.size) && it.index != item.index
+        }
+        if (target != null) {
+            if (item.index == listState.firstVisibleItemIndex || target.index == listState.firstVisibleItemIndex) {
+                scope.launch { listState.scrollToItem(listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset) }
+            }
+            onMove(item.index, target.index)
+            draggingIndex = target.index
+        } else {
+            val overscroll = when {
+                draggedDelta > 0 -> (end - listState.layoutInfo.viewportEndOffset).coerceAtLeast(0f)
+                draggedDelta < 0 -> (start - listState.layoutInfo.viewportStartOffset).coerceAtMost(0f)
+                else -> 0f
+            }
+            if (overscroll != 0f) scrollChannel.trySend(overscroll)
+        }
+    }
+
+    fun onDragEnd() {
+        if (draggingIndex != null) onDrop()
+        draggingIndex = null
+        draggedDelta = 0f
+        initialOffset = 0
+    }
+
+    suspend fun runAutoScroll() {
+        for (diff in scrollChannel) listState.scrollBy(diff)
+    }
+}
+
 /** 상단 일차 탭. 3일 이하면 화면을 나눠 꽉 채우고, 더 길면 옆으로 스크롤 */
 @Composable
 private fun DayTabs(days: List<TripDay>, selectedIndex: Int, onSelect: (Int) -> Unit, modifier: Modifier = Modifier) {
@@ -274,20 +512,22 @@ private fun DayTabs(days: List<TripDay>, selectedIndex: Int, onSelect: (Int) -> 
     }
 }
 
-/** 번호 + 타임라인 점/선 + 일정 카드(⋮ 메뉴) */
+/** 번호 + 타임라인 점/선 + 일정 카드(⋮ → 삭제). 끄는 중이면 카드가 파랗게 바뀜 */
 @Composable
 private fun ScheduleRow(
     number: Int,
     schedule: Schedule,
     isLast: Boolean,
-    canMoveUp: Boolean,
-    canMoveDown: Boolean,
-    onMoveUp: () -> Unit,
-    onMoveDown: () -> Unit,
-    onDelete: () -> Unit
+    dragging: Boolean,
+    onDelete: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
+    val cardColor by animateColorAsState(if (dragging) ScheduleBlue else Color.White, label = "schedule_card")
+    val titleColor = if (dragging) Color.White else ScheduleText
+    val subColor = if (dragging) Color.White.copy(alpha = 0.85f) else ScheduleGray
+
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .height(androidx.compose.foundation.layout.IntrinsicSize.Min),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -324,9 +564,10 @@ private fun ScheduleRow(
             modifier = Modifier
                 .weight(1f)
                 .heightIn(min = 72.dp)
+                .shadow(if (dragging) 6.dp else 0.dp, RoundedCornerShape(15.dp))
                 .clip(RoundedCornerShape(15.dp))
-                .background(Color.White)
-                .border(1.dp, ScheduleCardBorder, RoundedCornerShape(15.dp))
+                .background(cardColor)
+                .border(1.dp, if (dragging) ScheduleBlue else ScheduleCardBorder, RoundedCornerShape(15.dp))
                 .padding(start = 14.dp, top = 12.dp, bottom = 12.dp)
         ) {
             Column(modifier = Modifier.padding(end = 40.dp)) {
@@ -334,14 +575,14 @@ private fun ScheduleRow(
                     schedule.title,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
-                    color = ScheduleText,
+                    color = titleColor,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
                 val sub = schedule.address.ifBlank { schedule.memo }
                 if (sub.isNotBlank()) {
                     Spacer(Modifier.height(4.dp))
-                    Text(sub, fontSize = 12.sp, color = ScheduleGray, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Text(sub, fontSize = 12.sp, color = subColor, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 }
             }
             Box(modifier = Modifier.align(Alignment.TopEnd)) {
@@ -352,14 +593,21 @@ private fun ScheduleRow(
                         .padding(end = 4.dp)
                         .testTag("schedule_menu_${schedule.scheduleId}")
                 ) {
-                    Icon(Icons.Filled.MoreVert, contentDescription = "일정 메뉴", tint = ScheduleGray, modifier = Modifier.size(16.dp))
+                    Icon(Icons.Filled.MoreVert, contentDescription = "일정 메뉴", tint = subColor, modifier = Modifier.size(16.dp))
                 }
-                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                    if (canMoveUp) DropdownMenuItem(text = { Text("위로 이동") }, onClick = { menuOpen = false; onMoveUp() })
-                    if (canMoveDown) DropdownMenuItem(text = { Text("아래로 이동") }, onClick = { menuOpen = false; onMoveDown() })
+                // ⋮ 를 누르면 작게 [삭제] 만 표시
+                DropdownMenu(
+                    expanded = menuOpen,
+                    onDismissRequest = { menuOpen = false },
+                    shape = RoundedCornerShape(10.dp),
+                    containerColor = Color.White
+                ) {
                     DropdownMenuItem(
-                        text = { Text("삭제", color = Color(0xFFCF592D)) },
-                        onClick = { menuOpen = false; onDelete() }
+                        text = { Text("삭제", color = ScheduleDeleteRed, fontSize = 14.sp, fontWeight = FontWeight.Bold) },
+                        onClick = { menuOpen = false; onDelete() },
+                        modifier = Modifier
+                            .height(40.dp)
+                            .testTag("schedule_delete_${schedule.scheduleId}")
                     )
                 }
             }

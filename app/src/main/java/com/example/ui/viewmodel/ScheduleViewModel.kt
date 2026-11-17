@@ -65,6 +65,9 @@ class ScheduleViewModel(private val tripId: String) : ViewModel() {
 
     fun swap(a: Schedule, b: Schedule) = runAction { it.swapOrder(tripId, a, b) }
 
+    /** 길게 눌러 끌어서 바꾼 순서 저장 */
+    fun reorder(ordered: List<Schedule>) = runAction { it.saveOrder(tripId, ordered) }
+
     private fun runAction(block: suspend (ScheduleRepository) -> Unit) {
         val repo = repository ?: return
         viewModelScope.launch {

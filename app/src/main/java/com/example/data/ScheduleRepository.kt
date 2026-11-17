@@ -57,6 +57,22 @@ class ScheduleRepository(
         schedules(tripId).document(scheduleId).delete().awaitTask()
     }
 
+    /**
+     * 끌어서 바꾼 순서를 저장합니다. 화면에 보이는 순서대로 order 값을 다시 매깁니다.
+     * (기존 order 값들을 작은 순으로 다시 나눠 주므로 다른 날 일정에는 영향이 없습니다)
+     */
+    suspend fun saveOrder(tripId: String, ordered: List<Schedule>) {
+        if (ordered.isEmpty()) return
+        val values = ordered.map { it.order }.sorted().toMutableList()
+        // 같은 값이 있으면 순서가 섞일 수 있어서 1씩 키워 모두 다르게 만듭니다.
+        for (i in 1 until values.size) if (values[i] <= values[i - 1]) values[i] = values[i - 1] + 1
+        val batch = db.batch()
+        ordered.forEachIndexed { i, s ->
+            if (s.order != values[i]) batch.update(schedules(tripId).document(s.scheduleId), "order", values[i])
+        }
+        batch.commit().awaitTask()
+    }
+
     /** 두 일정의 순서를 맞바꿉니다 (위로/아래로 이동) */
     suspend fun swapOrder(tripId: String, a: Schedule, b: Schedule) {
         val batch = db.batch()
