@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import com.example.ui.components.CategoryPalette
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -97,6 +98,7 @@ internal fun SpendingAnalysisSection(expenses: List<Expense>) {
         ) {
             PieChart(
                 values = byCategory.map { it.second },
+                colors = byCategory.map { CategoryPalette.of(it.first).main },
                 modifier = Modifier.size(160.dp)
             )
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -120,7 +122,7 @@ internal fun SpendingAnalysisSection(expenses: List<Expense>) {
                         modifier = Modifier
                             .size(8.dp)
                             .clip(CircleShape)
-                            .background(ChartColors[index % ChartColors.size])
+                            .background(CategoryPalette.of(category).main)
                     )
                     Text("#$category", modifier = Modifier.weight(1f), fontSize = 13.sp, color = AText)
                     Text(won(amount), fontSize = 13.sp, fontWeight = FontWeight.Bold, color = AText)
@@ -139,7 +141,7 @@ internal fun SpendingAnalysisSection(expenses: List<Expense>) {
 
 /** 원형 그래프 (조각 사이 흰 선) */
 @Composable
-private fun PieChart(values: List<Long>, modifier: Modifier = Modifier) {
+private fun PieChart(values: List<Long>, colors: List<Color> = emptyList(), modifier: Modifier = Modifier) {
     val total = values.sum().toFloat()
     Canvas(modifier = modifier) {
         if (total <= 0f) return@Canvas
@@ -150,7 +152,7 @@ private fun PieChart(values: List<Long>, modifier: Modifier = Modifier) {
         values.forEachIndexed { i, v ->
             val sweep = v / total * 360f
             drawArc(
-                color = ChartColors[i % ChartColors.size],
+                color = colors.getOrNull(i) ?: ChartColors[i % ChartColors.size],
                 startAngle = start,
                 sweepAngle = sweep,
                 useCenter = true,

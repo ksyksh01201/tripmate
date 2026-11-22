@@ -70,5 +70,27 @@ class BudgetViewModel(private val tripId: String) : ViewModel() {
         }
     }
 
+    /** 지출 수정. 끝나면 savedCount가 늘어 팝업이 닫힙니다. */
+    fun updateExpense(
+        expenseId: String,
+        title: String,
+        amount: Long,
+        category: String,
+        paidBy: String,
+        splitAmong: List<String>
+    ) {
+        val repo = repository ?: return
+        if (_addState.value.isSaving) return
+        _addState.update { it.copy(isSaving = true, errorMessage = null) }
+        viewModelScope.launch {
+            try {
+                repo.updateExpense(tripId, expenseId, title, amount, category, paidBy, splitAmong)
+                _addState.update { it.copy(isSaving = false, savedCount = it.savedCount + 1) }
+            } catch (e: Exception) {
+                _addState.update { it.copy(isSaving = false, errorMessage = "수정하지 못했어요. (${e.message})") }
+            }
+        }
+    }
+
     fun clearError() = _addState.update { it.copy(errorMessage = null) }
 }

@@ -1,5 +1,9 @@
 package com.example.ui.screens
 
+import com.example.data.TripMemberNames
+import com.example.ui.components.CategoryColor
+import com.example.ui.components.CategoryPalette
+import com.example.ui.components.MemberNameCache
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.ui.draw.shadow
 import androidx.compose.foundation.background
@@ -79,12 +83,14 @@ private val BudgetMemberColors = listOf(
 
 private enum class BudgetTab(val label: String) { List("지출 목록"), Analysis("소비 분석"), Settle("정산하기") }
 
-/** 멤버 표시 이름. 아직 닉네임이 없어서 나 / 멤버2 / 멤버3 … 으로 표시 */
+/** 멤버 표시 이름. 나는 "나", 다른 사람은 여행방에 저장된 이름 (없으면 멤버2 …) */
 internal fun memberName(uid: String, members: List<String>, myUid: String?): String =
-    if (uid == myUid) "나" else "멤버${members.indexOf(uid) + 1}"
+    if (uid == myUid) "나"
+    else MemberNameCache.names[uid]?.takeIf { it.isNotBlank() } ?: "멤버${members.indexOf(uid) + 1}"
 
 private fun memberInitial(uid: String, members: List<String>, myUid: String?): String =
-    if (uid == myUid) "나" else "${members.indexOf(uid) + 1}"
+    if (uid == myUid) "나"
+    else MemberNameCache.names[uid]?.takeIf { it.isNotBlank() }?.take(1) ?: "${members.indexOf(uid) + 1}"
 
 private fun memberColor(uid: String, members: List<String>): Color =
     BudgetMemberColors[members.indexOf(uid).coerceAtLeast(0) % BudgetMemberColors.size]
@@ -107,10 +113,21 @@ fun BudgetContent(trip: Trip, myUid: String?) {
     val addState by viewModel.addState.collectAsStateWithLifecycle()
     var tab by rememberSaveable { mutableStateOf(BudgetTab.List) }
     var showAdd by rememberSaveable { mutableStateOf(false) }
+    // 수정 중인 지출 id (지출 목록에서 항목을 누르면 설정)
+    var editingId by rememberSaveable { mutableStateOf<String?>(null) }
 
     // 저장이 끝나면 팝업 닫기
     LaunchedEffect(addState.savedCount) {
-        if (addState.savedCount > 0) showAdd = false
+        if (addState.savedCount > 0) {
+            showAdd = false
+            editingId = null
+        }
+    }
+    // 멤버 이름 받아 오기 (결제한 사람 / 나눌 사람에 표시)
+    LaunchedEffect(trip.tripId) {
+        runCatching {
+            TripMemberNames.observe(trip.tripId).collect { MemberNameCache.names.putAll(it) }
+        }
     }
 
     val members = trip.members
@@ -144,7 +161,11 @@ fun BudgetContent(trip: Trip, myUid: String?) {
                         expenses = expenses,
                         loadError = loadError,
                         members = members,
-                        myUid = myUid
+                        myUid = myUid,
+                        onClick = { e ->
+                            viewModel.clearError()
+                            editingId = e.expenseId
+                        }
                     )
                     // 떠 있는 [지출 추가] 버튼에 마지막 지출이 가리지 않게 여백
                     Spacer(Modifier.height(80.dp))
@@ -191,6 +212,22 @@ fun BudgetContent(trip: Trip, myUid: String?) {
             onDismiss = { showAdd = false },
             onSave = { title, amount, category, paidBy, splitAmong ->
                 viewModel.addExpense(title, amount, category, paidBy, splitAmong, System.currentTimeMillis())
+            }
+        )
+    }
+
+    // 지출 목록 항목을 누르면: 지난번에 작성한 내용이 채워진 수정 팝업
+    val editing = editingId?.let { id -> list.find { it.expenseId == id } }
+    if (editing != null) {
+        AddExpenseDialog(
+            members = members,
+            myUid = myUid,
+            isSaving = addState.isSaving,
+            errorMessage = addState.errorMessage,
+            onDismiss = { editingId = null },
+            initial = editing,
+            onSave = { title, amount, category, paidBy, splitAmong ->
+                viewModel.updateExpense(editing.expenseId, title, amount, category, paidBy, splitAmong)
             }
         )
     }
@@ -319,7 +356,8 @@ private fun ExpenseListSection(
     expenses: List<Expense>?,
     loadError: String?,
     members: List<String>,
-    myUid: String?
+    myUid: String?,
+    onClick: (Expense) -> Unit = {}
 ) {
     Column(
         modifier = Modifier
@@ -342,25 +380,18 @@ private fun ExpenseListSection(
                 lineHeight = 21.sp,
                 color = BudgetGray
             )
-            else -> expenses.forEach { e -> ExpenseItem(e, members, myUid) }
+            else -> expenses.forEach { e -> ExpenseItem(e, members, myUid, onClick = { onClick(e) }) }
         }
     }
 }
 
-/** 해시태그(분류) 칩 색: 글자색 to 배경색 */
-private fun categoryColors(category: String): Pair<Color, Color> = when (category) {
-    "숙박" -> Color(0xFF197CF0) to Color(0x3D197CF0)
-    "식비" -> Color(0xFFE35626) to Color(0x2EFF7A4D)
-    "카페" -> Color(0xFF8B5E3C) to Color(0x2E8B5E3C)
-    "교통" -> Color(0xFF2E8B7E) to Color(0x2E5FB3A8)
-    "관광" -> Color(0xFF7A6CC4) to Color(0x2E9187CF)
-    "쇼핑" -> Color(0xFFD08A00) to Color(0x2EF5B942)
-    else -> Color(0xFF727272) to Color(0x29B0B0B0)
-}
+/** 해시태그(분류) 칩 색: 글자색 to 배경색 (소비 분석 그래프와 같은 색 계열) */
+private fun categoryColors(category: String): Pair<Color, Color> =
+    CategoryPalette.of(category).let { it.text to it.soft }
 
 /** 지출 1건 카드 (피그마 "지출 내역") */
 @Composable
-private fun ExpenseItem(expense: Expense, members: List<String>, myUid: String?) {
+private fun ExpenseItem(expense: Expense, members: List<String>, myUid: String?, onClick: () -> Unit = {}) {
     val splitCount = expense.splitAmong.ifEmpty { members }.size
     val (chipText, chipBg) = categoryColors(expense.category)
     Column(
@@ -369,6 +400,7 @@ private fun ExpenseItem(expense: Expense, members: List<String>, myUid: String?)
             .clip(RoundedCornerShape(15.dp))
             .background(Color.White)
             .border(1.dp, ExpenseBorder, RoundedCornerShape(15.dp))
+            .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 8.dp)
             .testTag("expense_${expense.expenseId}"),
         verticalArrangement = Arrangement.spacedBy(1.dp)
@@ -430,13 +462,24 @@ private fun AddExpenseDialog(
     isSaving: Boolean,
     errorMessage: String?,
     onDismiss: () -> Unit,
+    initial: Expense? = null,
     onSave: (title: String, amount: Long, category: String, paidBy: String, splitAmong: List<String>) -> Unit
 ) {
-    var title by rememberSaveable { mutableStateOf("") }
-    var amountText by rememberSaveable { mutableStateOf("") }
-    var category by rememberSaveable { mutableStateOf(ExpenseCategories.all.first()) }
-    var paidBy by rememberSaveable { mutableStateOf(myUid?.takeIf { it in members } ?: members.firstOrNull().orEmpty()) }
-    var splitAmong by remember { mutableStateOf(members) }
+    // initial이 있으면 "지출 수정": 지난번에 작성한 내용으로 채워서 열기
+    var title by rememberSaveable { mutableStateOf(initial?.title.orEmpty()) }
+    var amountText by rememberSaveable { mutableStateOf(initial?.amount?.takeIf { it > 0 }?.toString().orEmpty()) }
+    var category by rememberSaveable {
+        mutableStateOf(initial?.category?.takeIf { it in ExpenseCategories.all } ?: ExpenseCategories.all.first())
+    }
+    var paidBy by rememberSaveable {
+        mutableStateOf(
+            initial?.paidBy?.takeIf { it in members }
+                ?: myUid?.takeIf { it in members } ?: members.firstOrNull().orEmpty()
+        )
+    }
+    var splitAmong by remember {
+        mutableStateOf(initial?.splitAmong?.filter { it in members }?.ifEmpty { null } ?: members)
+    }
 
     val amount = amountText.toLongOrNull() ?: 0L
     val canSave = title.isNotBlank() && amount > 0 && paidBy.isNotEmpty() && splitAmong.isNotEmpty() && !isSaving
@@ -457,7 +500,7 @@ private fun AddExpenseDialog(
                     .verticalScroll(rememberScrollState())
                     .padding(24.dp)
             ) {
-                DialogHeader(title = "지출 추가", onClose = onDismiss, closeEnabled = !isSaving)
+                DialogHeader(title = if (initial != null) "지출 수정" else "지출 추가", onClose = onDismiss, closeEnabled = !isSaving)
                 Spacer(Modifier.height(20.dp))
 
                 FieldLabel("지출 내용")
@@ -504,7 +547,8 @@ private fun AddExpenseDialog(
                     label = { "#$it" },
                     isSelected = { it == category },
                     onClick = { category = it },
-                    tagPrefix = "expense_category"
+                    tagPrefix = "expense_category",
+                    colorOf = { CategoryPalette.of(it) }
                 )
                 Spacer(Modifier.height(16.dp))
 
@@ -545,7 +589,7 @@ private fun AddExpenseDialog(
 
                 Spacer(Modifier.height(24.dp))
                 PrimaryDialogButton(
-                    text = "추가하기",
+                    text = if (initial != null) "수정하기" else "추가하기",
                     enabled = canSave,
                     isLoading = isSaving,
                     testTag = "expense_save_button",
@@ -570,19 +614,35 @@ private fun <T> ChipRows(
     label: (T) -> String,
     isSelected: (T) -> Boolean,
     onClick: (T) -> Unit,
-    tagPrefix: String
+    tagPrefix: String,
+    colorOf: ((T) -> CategoryColor)? = null
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         items.chunked(4).forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 row.forEachIndexed { i, item ->
                     val selected = isSelected(item)
+                    // 분류 칩은 고유 색: 선택 = 진한 색 배경, 미선택 = 연한 색 배경
+                    val palette = colorOf?.invoke(item)
+                    val bg = when {
+                        palette != null -> if (selected) palette.main else palette.soft
+                        else -> if (selected) BudgetBlue else Color.White
+                    }
+                    val line = when {
+                        palette != null -> if (selected) palette.main else Color.Transparent
+                        else -> if (selected) BudgetBlue else Color(0xFFE0E3E8)
+                    }
+                    val fg = when {
+                        selected -> Color.White
+                        palette != null -> palette.text
+                        else -> BudgetText
+                    }
                     Box(
                         modifier = Modifier
                             .height(38.dp)
                             .clip(RoundedCornerShape(19.dp))
-                            .background(if (selected) BudgetBlue else Color.White)
-                            .border(1.dp, if (selected) BudgetBlue else Color(0xFFE0E3E8), RoundedCornerShape(19.dp))
+                            .background(bg)
+                            .border(1.dp, line, RoundedCornerShape(19.dp))
                             .clickable { onClick(item) }
                             .padding(horizontal = 14.dp)
                             .testTag("${tagPrefix}_${items.indexOf(item)}"),
@@ -592,7 +652,7 @@ private fun <T> ChipRows(
                             text = label(item),
                             fontSize = 14.sp,
                             fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-                            color = if (selected) Color.White else BudgetText
+                            color = fg
                         )
                     }
                 }
