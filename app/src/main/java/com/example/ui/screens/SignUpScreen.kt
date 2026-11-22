@@ -40,57 +40,70 @@ import com.example.ui.components.TripMateTextField
 import com.example.ui.theme.TripMateBlue
 import com.example.ui.theme.TripMateOrange
 import com.example.ui.theme.TripMateTextSecondary
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.UserProfileChangeRequest
 
 /**
  * [개발용 임시 회원가입 검증 로직]
  * Firebase 연동 전 UI 및 화면 전환 테스트를 위한 임시 회원가입 검증입니다.
  * 실제 계정 데이터가 서버나 DB에 생성되지 않으며, 테스트 완료 후 Firebase Auth로 대체될 예정입니다.
  */
-private fun executeMockSignUp(
+
+private fun executeFirebaseSignUp(
     name: String,
     email: String,
     password: String,
-    context: Context,
     onSuccess: () -> Unit,
     onError: (String) -> Unit
 ) {
     val trimmedName = name.trim()
     val trimmedEmail = email.trim()
-    val trimmedPassword = password.trim()
 
-    // 1. 이름 입력값 검사
     if (trimmedName.isEmpty()) {
         onError("이름을 입력해 주세요.")
         return
     }
 
-    // 2. 이메일 입력값 검사
     if (trimmedEmail.isEmpty()) {
         onError("이메일을 입력해 주세요.")
         return
     }
 
-    val emailRegex = "^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$".toRegex()
-    if (!emailRegex.matches(trimmedEmail)) {
-        onError("올바른 이메일 형식을 입력해 주세요. (예: example@email.com)")
+    if (password.length < 8) {
+        onError("비밀번호는 8자 이상 입력해 주세요.")
         return
     }
 
-    // 3. 비밀번호 입력값 검사
-    if (trimmedPassword.isEmpty()) {
-        onError("비밀번호를 입력해 주세요.")
-        return
-    }
+    val auth = FirebaseAuth.getInstance()
 
-    if (trimmedPassword.length < 8) {
-        onError("비밀번호를 8자 이상 입력해 주세요.")
-        return
-    }
+    auth.createUserWithEmailAndPassword(
+        trimmedEmail,
+        password
+    ).addOnSuccessListener { result ->
+        val profileUpdates = UserProfileChangeRequest.Builder()
+            .setDisplayName(trimmedName)
+            .build()
 
-    // 검증 성공: 개발용 임시 회원가입 완료 안내 후 로그인 화면으로 복귀
-    Toast.makeText(context, "[개발용] 임시 회원가입이 완료되었습니다. 로그인해 주세요.", Toast.LENGTH_SHORT).show()
-    onSuccess()
+        val user = result.user
+        if (user == null) {
+            onError("사용자 정보를 확인하지 못했습니다.")
+            return@addOnSuccessListener
+        }
+
+        user.updateProfile(profileUpdates)
+            .addOnSuccessListener {
+                auth.signOut()
+                onSuccess()
+            }
+            .addOnFailureListener { e ->
+                auth.signOut()
+                onError("이름 저장에 실패했습니다: ${e.localizedMessage}")
+            }
+    }.addOnFailureListener { e ->
+        onError("회원가입에 실패했습니다: ${e.localizedMessage}")
+    }
 }
+
 
 @Composable
 fun SignUpScreen(
@@ -196,15 +209,25 @@ fun SignUpScreen(
             // Sign Up Button (Coral Orange)
             Button(
                 onClick = {
-                    executeMockSignUp(
+                    executeFirebaseSignUp(
                         name = name,
                         email = email,
                         password = password,
-                        context = context,
-                        onSuccess = onSignUpSuccess,
+                        onSuccess = {
+                            Toast.makeText(
+                                context,
+                                "회원가입이 완료되었습니다. 로그인해 주세요.",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                            onSignUpSuccess()
+                        },
                         onError = { message ->
                             errorMessage = message
-                            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                            Toast.makeText(
+                                context,
+                                message,
+                                Toast.LENGTH_SHORT
+                            ).show()
                         }
                     )
                 },

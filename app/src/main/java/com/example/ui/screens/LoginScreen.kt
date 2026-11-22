@@ -56,44 +56,44 @@ import com.example.ui.theme.TripMateBlue
 import com.example.ui.theme.TripMateOrange
 import com.example.ui.theme.TripMateTextSecondary
 import kotlinx.coroutines.delay
+import com.google.firebase.auth.FirebaseAuth
 
 /**
  * [개발용 임시 인증 검증 로직]
  * Firebase 연동 전 UI 및 화면 전환 테스트를 위한 임시 로그인 검증입니다.
  * 실제 사용자 계정 인증 서버와 연결된 기능이 아니며, 테스트 완료 후 Firebase Auth로 대체될 예정입니다.
  */
-private fun executeMockLogin(
+
+private fun executeFirebaseLogin(
     email: String,
     password: String,
-    context: Context,
     onSuccess: (String) -> Unit,
     onError: (String) -> Unit
 ) {
     val trimmedEmail = email.trim()
-    val trimmedPassword = password.trim()
 
-    // 1. 이메일 입력값 검사
     if (trimmedEmail.isEmpty()) {
         onError("이메일을 입력해 주세요.")
         return
     }
 
-    // 2. 이메일 형식 검사 (간단한 이메일 정규식)
-    val emailRegex = "^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$".toRegex()
-    if (!emailRegex.matches(trimmedEmail)) {
-        onError("올바른 이메일 형식을 입력해 주세요. (예: example@email.com)")
-        return
-    }
-
-    // 3. 비밀번호 입력값 검사
-    if (trimmedPassword.isEmpty()) {
+    if (password.isEmpty()) {
         onError("비밀번호를 입력해 주세요.")
         return
     }
 
-    // 검증 성공: 개발용 임시 로그인 완료 후 홈 화면으로 이동 (실제 인증 서버 연동 전 개발용)
-    onSuccess(trimmedEmail)
+    val auth = FirebaseAuth.getInstance()
+
+    auth.signInWithEmailAndPassword(
+        trimmedEmail,
+        password
+    ).addOnSuccessListener {
+        onSuccess(trimmedEmail)
+    }.addOnFailureListener {
+        onError("이메일 또는 비밀번호를 확인해 주세요.")
+    }
 }
+
 
 @Composable
 fun LoginScreen(
@@ -198,19 +198,24 @@ fun LoginScreen(
             Button(
                 onClick = {
                     if (isLoginSuccess) return@Button
-                    executeMockLogin(
+
+                    executeFirebaseLogin(
                         email = email,
                         password = password,
-                        context = context,
                         onSuccess = {
                             errorMessage = null
                             isLoginSuccess = true
                         },
                         onError = { message ->
                             errorMessage = message
-                            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                            Toast.makeText(
+                                context,
+                                message,
+                                Toast.LENGTH_SHORT
+                            ).show()
                         }
                     )
+
                 },
                 enabled = !isLoginSuccess,
                 modifier = Modifier

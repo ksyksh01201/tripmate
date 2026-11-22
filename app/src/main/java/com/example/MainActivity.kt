@@ -25,6 +25,8 @@ import com.example.ui.screens.SignUpScreen
 import com.example.ui.screens.SplashScreen
 import com.example.ui.screens.TripRoomScreen
 import com.example.ui.theme.MyApplicationTheme
+import androidx.compose.runtime.key
+import com.google.firebase.auth.FirebaseAuth
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -63,6 +65,7 @@ fun TripMateApp() {
                 onNavigateToSignUp = { currentScreen = Screen.SignUp },
                 onLoginSuccess = { email ->
                     AccountStore.saveLogin(context, email)
+                    currentTripId = null
                     currentScreen = Screen.Home
                 }
             )
@@ -76,22 +79,35 @@ fun TripMateApp() {
                 onSignUpSuccess = { currentScreen = Screen.Login }
             )
         }
+
         Screen.Home -> {
+            val uid = FirebaseAuth.getInstance().currentUser?.uid
+
             BackHandler {
-                currentScreen = Screen.Login
+                // 로그인 상태에서 뒤로 가기로
+                // 로그인 화면에 돌아가지 않도록 처리
             }
-            HomeRoute(
-                onOpenTrip = { tripId ->
-                    currentTripId = tripId
-                    currentScreen = Screen.TripRoom
-                },
-                onOpenAccount = { currentScreen = Screen.Account }
-            )
+
+            key(uid) {
+                HomeRoute(
+                    onOpenTrip = { tripId ->
+                        currentTripId = tripId
+                        currentScreen = Screen.TripRoom
+                    },
+                    onOpenAccount = {
+                        currentScreen = Screen.Account
+                    }
+                )
+            }
         }
+
         Screen.Account -> {
             AccountScreen(
                 onBack = { currentScreen = Screen.Home },
-                onLoggedOut = { currentScreen = Screen.Login }
+                onLoggedOut = {
+                    currentTripId = null
+                    currentScreen = Screen.Login
+                }
             )
         }
         Screen.TripRoom -> {

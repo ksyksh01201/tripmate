@@ -52,6 +52,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.data.AccountStore
 import com.example.ui.components.TripMateLogo
+import com.google.firebase.auth.FirebaseAuth
 
 // 피그마 "로그아웃 화면 / 로그아웃 확인 여부" 색상
 private val AccBlue = Color(0xFF4A90E2)
@@ -73,8 +74,23 @@ fun AccountScreen(
     onLoggedOut: () -> Unit
 ) {
     val context = LocalContext.current
-    var name by remember { mutableStateOf(AccountStore.name(context)) }
-    val email = remember { AccountStore.email(context) }
+
+    val auth = FirebaseAuth.getInstance()
+    val currentUid = auth.currentUser?.uid
+
+    var name by remember(currentUid) {
+        mutableStateOf(
+            auth.currentUser?.displayName
+                ?.takeIf { it.isNotBlank() }
+                ?: AccountStore.name(context)
+        )
+    }
+
+    val email = remember(currentUid) {
+        auth.currentUser?.email
+            ?: AccountStore.email(context)
+    }
+
     var confirmLogout by rememberSaveable { mutableStateOf(false) }
     var editName by rememberSaveable { mutableStateOf(false) }
 
@@ -160,11 +176,20 @@ fun AccountScreen(
     if (confirmLogout) {
         LogoutConfirmDialog(
             onCancel = { confirmLogout = false },
+
             onLogout = {
                 confirmLogout = false
+
+                // Firebase 로그인 계정 로그아웃
+                FirebaseAuth.getInstance().signOut()
+
+                // 기존 앱에 저장된 계정 정보 초기화
                 AccountStore.logout(context)
+
+                // 로그인 화면으로 이동
                 onLoggedOut()
             }
+
         )
     }
 
@@ -172,11 +197,45 @@ fun AccountScreen(
         NameEditDialog(
             initial = name,
             onDismiss = { editName = false },
-            onSave = {
-                AccountStore.saveName(context, it)
-                name = AccountStore.name(context)
-                editName = false
+
+            onSave = { newName ->
+                val trimmedName = newName.trim()
+                val user = FirebaseAuth.getInstance().currentUser
+
+                if (user != null && !user.isAnonymous) {
+                    val profileUpdates =
+                        com.google.firebase.auth.UserProfileChangeRequest.Builder()
+                            .setDisplayName(trimmedName)
+                            .build()
+
+                    user.updateProfile(profileUpdates)
+                        .addOnSuccessListener {
+                            AccountStore.saveName(context, trimmedName)
+                            name = trimmedName
+                            editName = false
+
+                            android.widget.Toast.makeText(
+                                context,
+                                "이름이 변경되었습니다.",
+                                android.widget.Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                        .addOnFailureListener {
+                            android.widget.Toast.makeText(
+                                context,
+                                "이름 변경에 실패했습니다.",
+                                android.widget.Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                } else {
+                    android.widget.Toast.makeText(
+                        context,
+                        "로그인 상태를 확인해 주세요.",
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show()
+                }
             }
+
         )
     }
 }
