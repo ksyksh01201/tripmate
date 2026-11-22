@@ -357,7 +357,7 @@ fun ScheduleContent(trip: Trip) {
                     .height(50.dp)
                     .clip(RoundedCornerShape(10.dp))
                     .background(ScheduleBlue)
-                    .clickable { viewModel.clearError(); showAdd = true }
+                    .clickable { viewModel.clearError(); showMap = true }
                     .testTag("schedule_add"),
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically
