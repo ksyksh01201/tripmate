@@ -327,7 +327,7 @@ fun BalanceGameFlowScreen(
 
                 val aiResult: BalanceGameAnalysisResult? = try {
                     geminiHelper.getRecommendedPlaces(
-                        tripTitle = "$destination 여행 (${members.joinToString(", ")})",
+                        tripTitle = destination,
                         games = gamesForAi
                     )
                 } catch (_: Exception) {
