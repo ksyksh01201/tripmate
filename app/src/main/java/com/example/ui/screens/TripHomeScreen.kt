@@ -98,7 +98,9 @@ fun TripHomeScreen(
     // 여행방 연결: 아래 탭(0 여행홈, 1 일정, 2 가계부)을 누르면 여행방 탭으로 이동
     onRoomTabSelected: (Int) -> Unit = {},
     // 여행방에서 쓸 때 위쪽 헤더를 바꿔 끼우는 자리
-    header: (@Composable () -> Unit)? = null
+    header: (@Composable () -> Unit)? = null,
+    // 여행방에서 쓸 때 아래 탭을 여행방 것으로 바꿔 끼우는 자리
+    bottomBar: (@Composable () -> Unit)? = null
 ) {
     val context = LocalContext.current
     val manager = remember { BalanceGameManager() }
@@ -219,7 +221,7 @@ fun TripHomeScreen(
     Scaffold(
         containerColor = Color(0xFFF7F9FC),
         bottomBar = {
-            TripHomeBottomBar(
+            if (bottomBar != null) bottomBar() else TripHomeBottomBar(
                 selectedTab = selectedTab,
                 mainBlue = mainBlue,
                 onTabSelected = { selectedTab = it; onRoomTabSelected(it) }

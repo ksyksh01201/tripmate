@@ -154,7 +154,8 @@ internal fun BalanceGameRoomHome(
                     2 -> onSelectTab(RoomTab.Budget)
                 }
             },
-            header = header
+            header = header,
+            bottomBar = roomBottomBar
         )
     }
 }
