@@ -96,7 +96,9 @@ fun TripHomeScreen(
     onOpenChemiResult: () -> Unit,
     onSelectPlace: (RecommendedPlace) -> Unit = {},
     // 여행방 연결: 아래 탭(0 여행홈, 1 일정, 2 가계부)을 누르면 여행방 탭으로 이동
-    onRoomTabSelected: (Int) -> Unit = {}
+    onRoomTabSelected: (Int) -> Unit = {},
+    // 여행방에서 쓸 때 위쪽 헤더를 바꿔 끼우는 자리
+    header: (@Composable () -> Unit)? = null
 ) {
     val context = LocalContext.current
     val manager = remember { BalanceGameManager() }
@@ -230,6 +232,8 @@ fun TripHomeScreen(
                 .padding(bottom = innerPadding.calculateBottomPadding())
                 .verticalScroll(rememberScrollState())
         ) {
+            // 여행방 공통 헤더가 있으면 그걸 쓰고, 없으면 원래 헤더
+            if (header != null) header() else {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -346,6 +350,7 @@ fun TripHomeScreen(
                         )
                     }
                 }
+            }
             }
 
             Spacer(modifier = Modifier.height(18.dp))

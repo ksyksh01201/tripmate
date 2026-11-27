@@ -67,7 +67,9 @@ fun CreateBalanceGameScreen(
     tripDateText: String = "2026년 8월 1일 ~ 8월 3일",
     otherMemberName: String = "김땡땡",
     onBack: () -> Unit = {},
-    onNavigateToResult: (String) -> Unit = {}
+    onNavigateToResult: (String) -> Unit = {},
+    // 여행방에서 쓸 때 위쪽 헤더를 바꿔 끼우는 자리
+    header: (@Composable () -> Unit)? = null
 ) {
     val context = LocalContext.current
     val manager = remember { BalanceGameManager() }
@@ -217,6 +219,8 @@ fun CreateBalanceGameScreen(
             .navigationBarsPadding()
     ) {
         // 상단 여행룸 헤더
+        // 여행방 공통 헤더가 있으면 그걸 쓰고, 없으면 원래 헤더
+        if (header != null) header() else {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -302,6 +306,7 @@ fun CreateBalanceGameScreen(
                     )
                 }
             }
+        }
         }
         // 본문 영역
         val games = gameListState.value

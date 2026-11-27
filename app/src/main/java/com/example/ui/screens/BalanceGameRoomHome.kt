@@ -33,7 +33,9 @@ internal fun BalanceGameRoomHome(
     trip: Trip,
     myUid: String?,
     onBack: () -> Unit,
-    onSelectTab: (RoomTab) -> Unit
+    onSelectTab: (RoomTab) -> Unit,
+    // 여행방과 같은 파란 헤더 (tripmate / 여행 이름 / 날짜 / 참여자 바)
+    header: @Composable () -> Unit
 ) {
     var stage by rememberSaveable(trip.tripId) { mutableStateOf(BalanceStage.Game) }
     val manager = remember { BalanceGameManager() }
@@ -72,7 +74,8 @@ internal fun BalanceGameRoomHome(
                     tripDateText = dateText,
                     otherMemberName = otherName,
                     onBack = onBack,
-                    onNavigateToResult = { stage = BalanceStage.Result }
+                    onNavigateToResult = { stage = BalanceStage.Result },
+                    header = header
                 )
             }
             TripRoomBottomBar(selected = RoomTab.Home, onSelect = onSelectTab)
@@ -95,6 +98,7 @@ internal fun BalanceGameRoomHome(
             initialMemberCount = trip.members.size,
             onBack = onBack,
             onOpenChemiResult = { stage = BalanceStage.Result },
+            header = header,
             onRoomTabSelected = { index ->
                 when (index) {
                     1 -> onSelectTab(RoomTab.Schedule)

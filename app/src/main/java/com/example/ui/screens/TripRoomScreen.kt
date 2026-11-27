@@ -140,7 +140,17 @@ fun TripRoomScreen(
             trip = roomTrip,
             myUid = loaded.myUid,
             onBack = onBack,
-            onSelectTab = { tab -> currentTab = tab }
+            onSelectTab = { tab -> currentTab = tab },
+            header = {
+                TripRoomHeader(
+                    trip = roomTrip,
+                    myUid = loaded.myUid,
+                    onBack = onBack,
+                    onEdit = { editing = true },
+                    onInvite = { copyInviteCode(roomTrip.inviteCode) },
+                    showMembers = true
+                )
+            }
         )
         return
     }
@@ -213,7 +223,7 @@ fun TripRoomScreen(
 
 /** 파란 상단 영역: ← tripmate 편집 / 여행 제목 / 날짜 / 멤버 + 초대 + 현재 N명 */
 @Composable
-private fun TripRoomHeader(
+internal fun TripRoomHeader(
     trip: Trip?,
     myUid: String?,
     onBack: () -> Unit,
