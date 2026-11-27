@@ -141,8 +141,8 @@ fun BalanceGameFlowScreen(
 
     val resolvedInitialCount = (initialMemberCount ?: initialMemberNames.size).coerceIn(2, 4)
 
-    var selectedMemberCount by rememberSaveable(tripId) {
-        mutableIntStateOf(resolvedInitialCount)
+    var selectedMemberCount by remember(tripId) { BalanceGameMemory.state(tripId, "memberCount") {
+        resolvedInitialCount }
     }
 
     LaunchedEffect(initialMemberCount) {
@@ -154,13 +154,11 @@ fun BalanceGameFlowScreen(
         }
     }
 
-    var activeMemberIndex by rememberSaveable(tripId) { mutableIntStateOf(0) }
-    var currentQuestionIndex by rememberSaveable(tripId) { mutableIntStateOf(0) }
-    var flowStep by rememberSaveable(tripId) {
-        mutableStateOf(
-            if (startAtChemiResult) GameFlowStep.CHEMI_RESULT else GameFlowStep.QUESTIONS
-        )
-    }
+    var activeMemberIndex by remember(tripId) { BalanceGameMemory.state(tripId, "activeMember") { 0 } }
+    var currentQuestionIndex by remember(tripId) { BalanceGameMemory.state(tripId, "questionIndex") { 0 } }
+    var flowStep by remember(tripId) { BalanceGameMemory.state(tripId, "flowStep") { if (startAtChemiResult) GameFlowStep.CHEMI_RESULT else GameFlowStep.QUESTIONS } }
+    // 분석 도중 다른 탭으로 갔다 오면 분석이 멈추므로 완료 화면으로 되돌림
+    LaunchedEffect(tripId) { if (flowStep == GameFlowStep.ANALYZING) flowStep = GameFlowStep.COMPLETED }
 
     val members = remember(selectedMemberCount, initialMemberNames) {
         val defaultLabels = listOf("홍길동(나)", "김명명", "이민수", "박지훈")
@@ -169,23 +167,23 @@ fun BalanceGameFlowScreen(
         }
     }
 
-    val answersByMember = remember(tripId) {
+    val answersByMember = remember(tripId) { BalanceGameMemory.obj(tripId, "answers") {
         mutableStateMapOf<Int, MutableMap<Int, String>>().apply {
             for (m in 0 until 4) {
                 put(m, mutableStateMapOf())
             }
         }
-    }
+    } }
 
     val fallbackQuestions = remember {
         BalanceGameTemplates.list.take(5).mapIndexed { idx, item -> item.copy(id = idx + 1) }
     }
-    var questions by remember(tripId) { mutableStateOf(fallbackQuestions) }
+    var questions by remember(tripId) { BalanceGameMemory.state(tripId, "questions") { fallbackQuestions } }
     var isLoadingQuestions by remember { mutableStateOf(false) }
-    var reloadNonce by rememberSaveable(tripId) { mutableIntStateOf(0) }
-    var lastLoadedDestination by rememberSaveable(tripId) { mutableStateOf<String?>(null) }
-    var lastHandledReloadNonce by rememberSaveable(tripId) { mutableIntStateOf(0) }
-    var computedReport by remember(tripId) { mutableStateOf<ChemiComputedReport?>(null) }
+    var reloadNonce by remember(tripId) { BalanceGameMemory.state(tripId, "reloadNonce") { 0 } }
+    var lastLoadedDestination by remember(tripId) { BalanceGameMemory.state<String?>(tripId, "lastDestination") { null } }
+    var lastHandledReloadNonce by remember(tripId) { BalanceGameMemory.state(tripId, "handledNonce") { 0 } }
+    var computedReport by remember(tripId) { BalanceGameMemory.state<ChemiComputedReport?>(tripId, "report") { null } }
 
     val geminiHelper = remember { GeminiHelper() }
     val manager = remember { BalanceGameManager() }

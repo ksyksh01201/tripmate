@@ -1,5 +1,13 @@
 package com.example.ui.screens
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -34,21 +42,45 @@ internal fun BalanceGameRoomHome(
     // 여행방과 같은 파란 헤더 (tripmate / 여행 이름 / 날짜 / 참여자 바)
     header: @Composable () -> Unit
 ) {
-    var stage by rememberSaveable(trip.tripId) { mutableStateOf(BalanceStage.Game) }
-    // 여행홈에서 "궁합 결과 보기"를 누르면 결과 화면부터 열기
-    var openResult by rememberSaveable(trip.tripId) { mutableStateOf(false) }
-    var chosenPlaces by remember(trip.tripId) { mutableStateOf<List<RecommendedPlace>>(emptyList()) }
+    val tripId = trip.tripId
+    // 다른 탭에 갔다 와도 유지되도록 앱이 켜져 있는 동안 기억 (BalanceGameMemory)
+    val firstVisit = remember(tripId) { !BalanceGameMemory.has(tripId, "stage") }
+    var stage by remember(tripId) { BalanceGameMemory.state(tripId, "stage") { BalanceStage.Game } }
+    // 결과 화면부터 열기 (여행홈의 "궁합 결과 보기", 또는 저장된 결과가 있을 때)
+    var openResult by remember(tripId) { BalanceGameMemory.state(tripId, "openResult") { false } }
+    var chosenPlaces by remember(tripId) {
+        BalanceGameMemory.state<List<RecommendedPlace>>(tripId, "chosenPlaces") { emptyList() }
+    }
+    // 처음 들어왔을 때만 저장된 결과를 확인하고, 확인될 때까지는 헤더만 보여 줌
+    var ready by remember(tripId) { mutableStateOf(!firstVisit) }
     val manager = remember { BalanceGameManager() }
 
-    // 이미 결과가 있으면 결과 후 여행홈부터
-    LaunchedEffect(trip.tripId) {
+    // 앱을 새로 켠 뒤 처음 들어왔는데 이미 결과가 저장돼 있으면 결과 화면부터
+    LaunchedEffect(tripId) {
+        if (!firstVisit) return@LaunchedEffect
         manager.getCachedAnalysisResult(
-            tripId = trip.tripId,
+            tripId = tripId,
             onResult = { cached ->
-                if (cached != null && stage == BalanceStage.Game && !openResult) stage = BalanceStage.Home
+                if (cached != null && stage == BalanceStage.Game) openResult = true
+                ready = true
             },
-            onFailure = { }
+            onFailure = { ready = true }
         )
+    }
+    if (!ready) {
+        Column(Modifier.fillMaxSize().background(Color(0xFFF3F5F8))) { header() }
+        return
+    }
+    // 결과 화면을 연 뒤에는 표시를 끔 (그 뒤로는 게임 화면이 보던 단계를 그대로 기억)
+    LaunchedEffect(openResult) {
+        if (openResult) {
+            kotlinx.coroutines.delay(500)
+            openResult = false
+        }
+    }
+    // 밸런스 게임 화면은 안쪽 여백이 있어서, 헤더를 가장자리까지 꽉 차게
+    val fullHeader: @Composable () -> Unit = {
+        Box(Modifier.fillMaxWidth().bleed(horizontal = 16.dp, top = 12.dp)) { header() }
     }
 
     // 이름: 여행 문서의 memberNames (각자 여행방에 들어오면 저장됨). 나를 맨 앞에 "(나)"로
@@ -91,7 +123,7 @@ internal fun BalanceGameRoomHome(
                 openResult = false
                 stage = BalanceStage.Home
             },
-            header = header,
+            header = fullHeader,
             bottomBar = roomBottomBar
         )
 
