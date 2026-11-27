@@ -61,6 +61,27 @@ class ExpenseRepository(
         )
         doc.set(expense).awaitTask()
     }
+
+    /** 지출 수정 (결제 시각과 작성자는 그대로 둠) */
+    suspend fun updateExpense(
+        tripId: String,
+        expenseId: String,
+        title: String,
+        amount: Long,
+        category: String,
+        paidBy: String,
+        splitAmong: List<String>
+    ) {
+        expenses(tripId).document(expenseId).update(
+            mapOf(
+                "title" to title.trim(),
+                "amount" to amount,
+                "category" to category,
+                "paidBy" to paidBy,
+                "splitAmong" to splitAmong
+            )
+        ).awaitTask()
+    }
 }
 
 private suspend fun <T> Task<T>.awaitTask(): T = suspendCancellableCoroutine { cont ->

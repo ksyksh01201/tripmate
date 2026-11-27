@@ -1,5 +1,9 @@
 package com.example.ui.components
 
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
@@ -45,6 +49,8 @@ import kotlinx.coroutines.flow.flowOf
 import com.google.firebase.auth.FirebaseAuth
 
 private val PanelBlue = Color(0xFF3A78D6)
+private val PanelGlass = Color(0x336EB0F0)     // rgba(110,176,240,0.2)
+private val PanelGlassLine = Color(0x36DCE6F2) // rgba(220,230,242,0.21)
 private val AvatarIconBlue = Color(0xFF3A78D6)
 
 /** 멤버 표시 이름: 나는 "홍길동(나)", 다른 사람은 아직 이름 정보가 없어서 "멤버2" … */
@@ -85,7 +91,8 @@ fun TripMembersPanel(
     members: List<String>,
     myUid: String?,
     modifier: Modifier = Modifier,
-    trip: Trip? = null
+    trip: Trip? = null,
+    onInvite: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     // 여행 문서에 저장된 이름들 (팀원이 자기 폰에서 들어오면 그 사람 이름이 보여요)
@@ -136,58 +143,74 @@ fun TripMembersPanel(
     val ordered = remember(members, myUid) {
         members.withIndex().sortedBy { if (it.value == myUid) 0 else 1 }
     }
+    // 피그마: 반투명 하늘색 상자 [참여자 N명   (사람)이름  (사람)이름  (+)]
     Row(
         modifier = modifier
             .fillMaxWidth()
+            .height(70.dp)
             .clip(RoundedCornerShape(16.dp))
-            .background(PanelBlue)
-            .padding(start = 14.dp, end = 10.dp, top = 8.dp, bottom = 8.dp)
+            .background(PanelGlass)
+            .border(1.dp, PanelGlassLine, RoundedCornerShape(16.dp))
+            .padding(start = 24.dp, end = 14.dp)
             .testTag("trip_room_members_panel"),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(Icons.Filled.Group, contentDescription = null, tint = Color.White, modifier = Modifier.size(22.dp))
-        Spacer(Modifier.width(8.dp))
-        Text("참여자 ${members.size}명", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.width(10.dp))
-        Box(
-            Modifier
-                .width(1.5.dp)
-                .height(34.dp)
-                .background(Color.White.copy(alpha = 0.85f))
-        )
+        Text("참여자 ${members.size}명", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+        Spacer(Modifier.width(14.dp))
         Row(
             modifier = Modifier
                 .weight(1f)
-                .horizontalScroll(rememberScrollState())
-                .padding(start = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
             ordered.forEach { (index, uid) ->
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.widthIn(min = 52.dp)
+                    modifier = Modifier.width(64.dp)
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(32.dp)
+                            .size(33.dp)
                             .clip(CircleShape)
                             .background(Color.White),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(Icons.Filled.Person, contentDescription = null, tint = AvatarIconBlue, modifier = Modifier.size(26.dp))
+                        Icon(Icons.Filled.Person, contentDescription = null, tint = AvatarIconBlue, modifier = Modifier.size(24.dp))
                     }
-                    Spacer(Modifier.height(3.dp))
+                    Spacer(Modifier.height(4.dp))
                     Text(
                         memberLabel(uid, index, myUid, names),
                         color = Color.White,
-                        fontSize = 11.sp,
+                        fontSize = 12.sp,
                         fontWeight = FontWeight.Medium,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.widthIn(max = 72.dp)
+                        textAlign = TextAlign.Center
                     )
                 }
+            }
+            // 멤버 초대: 점선 동그라미 + (누르면 초대코드 복사)
+            Box(
+                modifier = Modifier
+                    .padding(start = 8.dp, bottom = 14.dp)
+                    .size(37.dp)
+                    .clip(CircleShape)
+                    .drawBehind {
+                        drawCircle(
+                            color = Color.White,
+                            radius = size.minDimension / 2 - 1.dp.toPx(),
+                            style = Stroke(
+                                width = 2.dp.toPx(),
+                                pathEffect = PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(), 3.dp.toPx()))
+                            )
+                        )
+                    }
+                    .then(if (onInvite != null) Modifier.clickable(onClick = onInvite) else Modifier)
+                    .testTag("trip_room_invite_member"),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("+", color = Color.White, fontSize = 20.sp)
             }
         }
     }
