@@ -115,6 +115,8 @@ internal fun BalanceGameRoomHome(
             dateRangeText = dateText,
             initialMemberCount = trip.members.size,
             initialMemberNames = memberNames,
+            // 각자 자기 계정에서만 고르기 (나 먼저, 나머지는 memberNames 와 같은 순서)
+            memberUids = myUid?.let { me -> listOf(me) + trip.members.filter { it != me } },
             startAtChemiResult = openResult,
             onBack = onBack,
             onExitToTripHome = {

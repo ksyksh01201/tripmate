@@ -1,5 +1,7 @@
 package com.example.ui.screens
 
+import com.example.data.BalanceOnline
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -122,6 +124,8 @@ fun BalanceGameFlowScreen(
     onExitToTripHome: (() -> Unit)? = null,
     onPlacesRecommended: (List<RecommendedPlace>) -> Unit = {},
     onCreateScheduleWithPlaces: (List<RecommendedPlace>) -> Unit = {},
+    // 여행방에서 쓸 때: 멤버 uid (나 먼저, members 순서와 같게). 주면 각자 자기 계정에서만 고르기
+    memberUids: List<String>? = null,
     // 여행방에서 쓸 때: 위쪽 헤더와 아래 탭을 여행방 것으로 바꿔 끼움
     header: (@Composable () -> Unit)? = null,
     bottomBar: (@Composable () -> Unit)? = null
@@ -188,6 +192,51 @@ fun BalanceGameFlowScreen(
     val geminiHelper = remember { GeminiHelper() }
     val manager = remember { BalanceGameManager() }
 
+    // ── 각자 자기 계정에서만 고르기: 질문은 같이, 답은 내 칸에만 저장하고 남의 답은 받아 보기 ──
+    val online = memberUids != null && memberUids.size >= 2
+    val myUid = memberUids?.firstOrNull().orEmpty()
+    var questionVersion by remember(tripId) { BalanceGameMemory.state(tripId, "questionVersion") { 0L } }
+    if (online) {
+        DisposableEffect(tripId) {
+            val reg = BalanceOnline.listenQuestions(tripId) { shared ->
+                if (shared.version != questionVersion) {
+                    val changed = questionVersion != 0L
+                    questionVersion = shared.version
+                    questions = shared.questions
+                    if (changed) {
+                        answersByMember.values.forEach { it.clear() }
+                        currentQuestionIndex = 0
+                        computedReport = null
+                        if (flowStep != GameFlowStep.ANALYZING) flowStep = GameFlowStep.QUESTIONS
+                    }
+                }
+            }
+            onDispose { reg.remove() }
+        }
+        DisposableEffect(tripId, questionVersion) {
+            val version = questionVersion
+            val reg = if (version == 0L) null else BalanceOnline.listenAnswers(tripId, version) { all ->
+                memberUids!!.forEachIndexed { idx, uid ->
+                    val remote = all[uid].orEmpty()
+                    val local = answersByMember.getOrPut(idx) { mutableStateMapOf() }
+                    if (idx == 0) {
+                        if (local.isEmpty() && remote.isNotEmpty()) local.putAll(remote)
+                    } else if (local != remote) {
+                        local.clear()
+                        local.putAll(remote)
+                    }
+                }
+            }
+            onDispose { reg?.remove() }
+        }
+        val myAnswersNow = answersByMember[0]?.toMap().orEmpty()
+        LaunchedEffect(questionVersion, myAnswersNow) {
+            if (questionVersion != 0L && myAnswersNow.isNotEmpty()) {
+                BalanceOnline.saveMyAnswers(tripId, questionVersion, myUid, myAnswersNow)
+            }
+        }
+    }
+
     LaunchedEffect(startAtChemiResult, tripId, selectedMemberCount) {
         if (startAtChemiResult) {
             val applyReportWithCache: () -> Unit = {
@@ -248,7 +297,13 @@ fun BalanceGameFlowScreen(
 
         isLoadingQuestions = true
         try {
-            val generated = geminiHelper.getRandom5BalanceGames(destination)
+            val generated = (if (online) {
+                val shared = BalanceOnline.sharedQuestions(tripId, forceNew = isManualReload) {
+                    geminiHelper.getRandom5BalanceGames(destination).take(5)
+                }
+                questionVersion = shared.version
+                shared.questions
+            } else geminiHelper.getRandom5BalanceGames(destination))
                 .take(5)
                 .mapIndexed { idx, item -> item.copy(id = idx + 1) }
             questions = (if (generated.isNotEmpty()) generated else fallbackQuestions)
@@ -280,7 +335,7 @@ fun BalanceGameFlowScreen(
         }
     }
 
-    val currentAnswers = answersByMember.getOrPut(activeMemberIndex) { mutableStateMapOf() }
+    val currentAnswers = answersByMember.getOrPut(if (online) 0 else activeMemberIndex) { mutableStateMapOf() }
 
     val allAnswered = questions.isNotEmpty() && (0 until selectedMemberCount).all { mIdx ->
         val map = answersByMember[mIdx].orEmpty()
@@ -390,6 +445,7 @@ fun BalanceGameFlowScreen(
                 GameFlowStep.QUESTIONS -> {
                     FigmaQuestionStage(
                         header = header,
+                        online = online,
                         dateRangeText = dateRangeText,
                         destination = destination,
                         headerBlue = headerBlue,
@@ -409,8 +465,8 @@ fun BalanceGameFlowScreen(
                             }
                         },
                         members = members,
-                        activeMemberIndex = activeMemberIndex,
-                        onSelectMemberTab = { activeMemberIndex = it },
+                        activeMemberIndex = if (online) 0 else activeMemberIndex,
+                        onSelectMemberTab = { if (!online) activeMemberIndex = it },
                         currentAnswers = currentAnswers,
                         answersByMember = answersByMember,
                         allAnswered = allAnswered,
@@ -654,6 +710,7 @@ private fun FigmaTopMemberHeader(
 @Composable
 private fun FigmaQuestionStage(
     header: (@Composable () -> Unit)? = null,
+    online: Boolean = false,
     dateRangeText: String,
     destination: String,
     headerBlue: Color,
@@ -835,7 +892,7 @@ private fun FigmaQuestionStage(
                             }
                         }
                     },
-                    enabled = selectedOption != null || allAnswered,
+                    enabled = (selectedOption != null || allAnswered) && !(online && isLastQuestion && !allAnswered),
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(50.dp),
@@ -849,7 +906,7 @@ private fun FigmaQuestionStage(
                         text = when {
                             isLastQuestion && allAnswered -> "선택 완료"
                             !isLastQuestion -> "선택 완료"
-                            else -> "다음 참여자 선택하기"
+                            else -> if (online) "다른 참여자를 기다리는 중…" else "다음 참여자 선택하기"
                         },
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
