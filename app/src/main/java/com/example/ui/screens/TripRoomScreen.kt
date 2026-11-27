@@ -144,7 +144,7 @@ fun TripRoomScreen(
             onBack = onBack,
             onEdit = { if (loaded != null) editing = true },
             onInvite = { loaded?.trip?.inviteCode?.let(copyInviteCode) },
-            showMembers = currentTab != RoomTab.Schedule
+            showMembers = true
         )
 
         Box(
@@ -265,7 +265,7 @@ private fun TripRoomHeader(
             )
             Spacer(Modifier.height(18.dp))
             if (trip != null && showMembers) {
-                com.example.ui.components.TripMembersPanel(members = trip.members, myUid = myUid, trip = trip)
+                com.example.ui.components.TripMembersPanel(members = trip.members, myUid = myUid, trip = trip, onInvite = onInvite)
             }
         }
     }

@@ -1,5 +1,8 @@
 package com.example.ui.screens
 
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.rememberTextMeasurer
 import com.example.ui.components.CategoryPalette
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -126,13 +129,6 @@ internal fun SpendingAnalysisSection(expenses: List<Expense>) {
                     )
                     Text("#$category", modifier = Modifier.weight(1f), fontSize = 13.sp, color = AText)
                     Text(won(amount), fontSize = 13.sp, fontWeight = FontWeight.Bold, color = AText)
-                    Text(
-                        text = String.format(Locale.KOREA, "%.1f%%", amount * 100.0 / total),
-                        modifier = Modifier.width(49.dp),
-                        textAlign = TextAlign.End,
-                        fontSize = 12.sp,
-                        color = AGray
-                    )
                 }
             }
         }
@@ -143,6 +139,8 @@ internal fun SpendingAnalysisSection(expenses: List<Expense>) {
 @Composable
 private fun PieChart(values: List<Long>, colors: List<Color> = emptyList(), modifier: Modifier = Modifier) {
     val total = values.sum().toFloat()
+    val textMeasurer = rememberTextMeasurer()
+    val labelStyle = TextStyle(color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Medium)
     Canvas(modifier = modifier) {
         if (total <= 0f) return@Canvas
         val gap = 2.5.dp.toPx()
@@ -177,6 +175,27 @@ private fun PieChart(values: List<Long>, colors: List<Color> = emptyList(), modi
                 )
                 start += sweep
             }
+        }
+        // 조각 안에 퍼센트 (너무 작은 조각은 생략)
+        val radius = diameter / 2
+        val center = Offset(size.width / 2, size.height / 2)
+        start = -90f
+        values.forEach { v ->
+            val sweep = v / total * 360f
+            if (sweep >= 20f) {
+                val mid = Math.toRadians((start + sweep / 2).toDouble())
+                val r = if (values.size == 1) 0f else radius * 0.62f
+                val label = String.format(Locale.KOREA, "%.1f%%", v * 100f / total)
+                val layout = textMeasurer.measure(label, labelStyle)
+                drawText(
+                    textLayoutResult = layout,
+                    topLeft = Offset(
+                        center.x + (r * kotlin.math.cos(mid)).toFloat() - layout.size.width / 2f,
+                        center.y + (r * kotlin.math.sin(mid)).toFloat() - layout.size.height / 2f
+                    )
+                )
+            }
+            start += sweep
         }
     }
 }
