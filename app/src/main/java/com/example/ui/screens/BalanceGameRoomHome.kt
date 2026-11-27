@@ -5,7 +5,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import android.widget.Toast
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import com.example.data.RecommendedScheduleImporter
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.Composable
@@ -43,6 +46,7 @@ internal fun BalanceGameRoomHome(
     header: @Composable () -> Unit
 ) {
     val tripId = trip.tripId
+    val appContext = LocalContext.current.applicationContext
     // 다른 탭에 갔다 와도 유지되도록 앱이 켜져 있는 동안 기억 (BalanceGameMemory)
     val firstVisit = remember(tripId) { !BalanceGameMemory.has(tripId, "stage") }
     var stage by remember(tripId) { BalanceGameMemory.state(tripId, "stage") { BalanceStage.Game } }
@@ -120,6 +124,11 @@ internal fun BalanceGameRoomHome(
             onPlacesRecommended = { places -> if (places.isNotEmpty()) chosenPlaces = places },
             onCreateScheduleWithPlaces = { places ->
                 chosenPlaces = places
+                // 고른 장소를 일정 탭에도 넣기
+                RecommendedScheduleImporter.import(trip, places) { added ->
+                    val msg = if (added > 0) "일정 탭에 ${added}곳을 넣었어요" else "이미 일정에 있는 장소예요"
+                    Toast.makeText(appContext, msg, Toast.LENGTH_SHORT).show()
+                }
                 openResult = false
                 stage = BalanceStage.Home
             },
