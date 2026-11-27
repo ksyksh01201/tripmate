@@ -85,6 +85,8 @@ googleServices { missingGoogleServicesStrategy = MissingGoogleServicesStrategy.W
 dependencies {
   // 카카오맵 SDK (일정 > 지도 보기)
   implementation("com.kakao.maps.open:android:2.15.2")
+  // 밸런스 게임 장소 사진 (3.x는 코드가 달라서 2.7.0 고정)
+  implementation(libs.coil.compose)
   implementation(platform(libs.androidx.compose.bom))
   implementation(platform(libs.firebase.bom))
   // implementation(libs.accompanist.permissions)

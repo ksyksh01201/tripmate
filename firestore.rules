@@ -46,6 +46,21 @@ service cloud.firestore {
         allow read, update, delete: if isScheduleMember();
         allow create: if isScheduleMember() && request.resource.data.createdBy == request.auth.uid;
       }
+
+      // 밸런스 게임 질문/투표/결과: 여행 멤버만 보고 쓸 수 있습니다.
+      function isBalanceMember() {
+        return request.auth != null
+          && request.auth.uid in get(/databases/$(database)/documents/trips/$(tripId)).data.members;
+      }
+      match /balance_games/{gameId} {
+        allow read, write: if isBalanceMember();
+        match /{sub=**} {
+          allow read, write: if isBalanceMember();
+        }
+      }
+      match /balance_meta/{docId} {
+        allow read, write: if isBalanceMember();
+      }
     }
   }
 }
