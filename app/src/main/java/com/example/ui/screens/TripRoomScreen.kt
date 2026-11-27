@@ -133,6 +133,18 @@ fun TripRoomScreen(
         return
     }
 
+    // 2명 이상: 여행홈 탭은 팀원이 만든 밸런스 게임 → 궁합 결과 → 여행홈 흐름
+    val roomTrip = loaded?.trip
+    if (loaded != null && roomTrip != null && !roomTrip.isWaitingForMates && currentTab == RoomTab.Home) {
+        BalanceGameRoomHome(
+            trip = roomTrip,
+            myUid = loaded.myUid,
+            onBack = onBack,
+            onSelectTab = { tab -> currentTab = tab }
+        )
+        return
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -418,7 +430,7 @@ enum class RoomTab { Home, Schedule, Budget }
 
 /** 하단 탭: 여행홈 / 일정 / 가계부 */
 @Composable
-private fun TripRoomBottomBar(selected: RoomTab, onSelect: (RoomTab) -> Unit) {
+internal fun TripRoomBottomBar(selected: RoomTab, onSelect: (RoomTab) -> Unit) {
     Column(modifier = Modifier.background(Color.White)) {
         HorizontalDivider(color = Color(0xFFE3E3E3))
         Row(
