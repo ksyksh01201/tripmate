@@ -239,56 +239,6 @@ internal fun SettlementSection(
                 tag = "settle_member_$index"
             )
         }
-
-        // 송금 현황
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(15.dp))
-                .background(Color(0xFFEDF5FE))
-                .border(1.dp, Color(0xFFDCE6F2), RoundedCornerShape(15.dp))
-                .padding(horizontal = 14.dp, vertical = 12.dp)
-                .testTag("settle_transfers"),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = if (transfers.isEmpty()) "남은 정산 없음" else "남은 정산 ${transfers.size}건",
-                    modifier = Modifier.weight(1f),
-                    fontSize = 12.sp,
-                    color = AGray
-                )
-                val done = transfers.isEmpty()
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(if (done) Color(0xFFE3EEFC) else Color(0xFFFFF0E9))
-                        .padding(horizontal = 8.dp, vertical = 2.dp)
-                ) {
-                    Text(
-                        text = if (done) "정산 완료" else "미정산",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = if (done) ABlue else ASendRed
-                    )
-                }
-            }
-            if (transfers.isEmpty()) {
-                Text("모두 같은 금액을 냈어요!", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = AText)
-            }
-            transfers.forEach { t ->
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "${memberName(t.from, members, myUid)} → ${memberName(t.to, members, myUid)}",
-                        modifier = Modifier.weight(1f),
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = AText
-                    )
-                    Text(won(t.amount), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = ABlue)
-                }
-            }
-        }
     }
 }
 
