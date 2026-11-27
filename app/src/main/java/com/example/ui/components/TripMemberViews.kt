@@ -42,18 +42,39 @@ import com.example.data.AccountStore
 import com.example.data.Trip
 import com.example.data.TripMemberNames
 import kotlinx.coroutines.flow.flowOf
+import com.google.firebase.auth.FirebaseAuth
 
 private val PanelBlue = Color(0xFF3A78D6)
 private val AvatarIconBlue = Color(0xFF3A78D6)
 
 /** 멤버 표시 이름: 나는 "홍길동(나)", 다른 사람은 아직 이름 정보가 없어서 "멤버2" … */
+
 @Composable
-private fun memberLabel(uid: String, index: Int, myUid: String?, names: Map<String, String>): String {
+private fun memberLabel(
+    uid: String,
+    index: Int,
+    myUid: String?,
+    names: Map<String, String>
+): String {
     val context = LocalContext.current
-    val myName = remember { AccountStore.name(context) }
-    return if (uid == myUid) "${myName.ifBlank { "나" }}(나)"
-    else names[uid]?.takeIf { it.isNotBlank() } ?: "멤버${index + 1}"
+
+
+    val currentUser = FirebaseAuth.getInstance().currentUser
+
+    val myName = currentUser?.displayName
+        ?.takeIf { it.isNotBlank() }
+        ?: currentUser?.email?.substringBefore("@")
+        ?: "이름 없음"
+
+
+    return if (uid == myUid) {
+        "${myName.ifBlank { "나" }}(나)"
+    } else {
+        names[uid]?.takeIf { it.isNotBlank() }
+            ?: "멤버${index + 1}"
+    }
 }
+
 
 /**
  * 여행방 상단 참여자 바 (피그마 새 UI).
@@ -72,12 +93,38 @@ fun TripMembersPanel(
         trip?.tripId?.takeIf { it.isNotBlank() }?.let { TripMemberNames.observe(it) } ?: flowOf(emptyMap())
     }.collectAsState(initial = emptyMap())
     // 내 이름을 여행 문서에 저장해서 다른 멤버 화면에도 보이게 함
+
     LaunchedEffect(trip?.tripId, myUid) {
         val id = trip?.tripId
-        if (!id.isNullOrBlank() && myUid != null && myUid in members) {
-            runCatching { TripMemberNames.saveMyName(id, myUid, AccountStore.name(context)) }
+        val currentUser = FirebaseAuth.getInstance().currentUser
+
+        if (
+            !id.isNullOrBlank() &&
+            myUid != null &&
+            myUid in members &&
+            currentUser?.uid == myUid
+        ) {
+            runCatching {
+                val myName = currentUser.displayName
+                    ?.takeIf { it.isNotBlank() }
+                    ?: currentUser.email?.substringBefore("@")
+                    ?: "이름 없음"
+
+                TripMemberNames.saveMyName(
+                    id,
+                    myUid,
+                    myName
+                )
+            }.onFailure {
+                android.util.Log.e(
+                    "TripMembersPanel",
+                    "참여자 이름 저장 실패",
+                    it
+                )
+            }
         }
     }
+
     // 테스트 때 넣었던 가짜 멤버가 남아 있으면 자동으로 지움
     LaunchedEffect(trip?.tripId, members) {
         val id = trip?.tripId
@@ -148,17 +195,24 @@ fun TripMembersPanel(
 
 /** 홈 화면 파란 카드의 인원 표시: [👥 2명] 흰 테두리 알약 */
 @Composable
-fun TripMemberCountPill(count: Int, modifier: Modifier = Modifier) {
+fun TripMemberCountPill(
+    count: Int,
+    modifier: Modifier = Modifier,
+    highlighted: Boolean = true
+) {
+    val contentColor =
+        if (highlighted) Color.White else Color(0xFF4A90E2)
+
     Row(
         modifier = modifier
             .clip(RoundedCornerShape(50))
-            .border(1.5.dp, Color.White, RoundedCornerShape(50))
+            .border(1.5.dp, contentColor, RoundedCornerShape(50))
             .padding(horizontal = 16.dp, vertical = 5.dp)
             .testTag("home_member_count"),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(Icons.Filled.Group, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+        Icon(Icons.Filled.Group, contentDescription = null, tint = contentColor, modifier = Modifier.size(20.dp))
         Spacer(Modifier.width(10.dp))
-        Text("${count}명", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+        Text("${count}명", color = contentColor, fontSize = 14.sp, fontWeight = FontWeight.Medium)
     }
 }

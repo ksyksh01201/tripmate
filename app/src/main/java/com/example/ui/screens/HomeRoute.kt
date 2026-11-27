@@ -403,10 +403,12 @@ private fun UpcomingTripCard(
                     fontWeight = if (highlighted) FontWeight.SemiBold else FontWeight.Normal,
                     color = if (highlighted) Color.White else SubGray
                 )
-                if (highlighted) {
                     Spacer(Modifier.height(10.dp))
-                    com.example.ui.components.TripMemberCountPill(count = trip.members.size)
-                }
+                    com.example.ui.components.TripMemberCountPill(
+                        count = trip.members.size,
+                        highlighted = highlighted
+                    )
+
             }
         }
         Spacer(Modifier.width(12.dp))
